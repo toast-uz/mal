@@ -4,25 +4,24 @@ use std::io::{stdin, stdout, Write};
 fn main() {
     loop {
         let mut s = String::new();
-        print!("user> ");
-        stdout().flush().unwrap();
+        print!("user> "); stdout().flush().unwrap();
         if let Ok(0) = stdin().read_line(&mut s) { break; }
         println!("{}", rep(&s));
     }
 }
 
-fn rep<'a>(s: &'a str) -> &'a str {
+fn rep(s: &str) -> &str {
     PRINT(EVAL(READ(s)))
 }
 
-fn READ<'a>(s: &'a str) -> &'a str {
+fn READ(s: &str) -> &str {
     s
 }
 
-fn EVAL<'a>(s: &'a str) -> &'a str {
+fn EVAL(s: &str) -> &str {
     s
 }
 
-fn PRINT<'a>(s: &'a str) -> &'a str {
+fn PRINT(s: &str) -> &str {
     s
 }
