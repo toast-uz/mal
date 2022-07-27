@@ -167,20 +167,10 @@ impl PartialEq for MalType {
 impl Hash for MalType {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            Self::Comment => 10.hash(state),
-            Self::Lparen => 2.hash(state),
-            Self::Rparen => 3.hash(state),
-            Self::Lsqure => 4.hash(state),
-            Self::Rsqure => 5.hash(state),
-            Self::Lcurly => 6.hash(state),
-            Self::Rcurly => 7.hash(state),
             Self::Int(num) => num.hash(state),
             Self::Float(num) => (*num as i64).hash(state),
             Self::String(s) => s.hash(state),
             Self::Keyword(s) => s.hash(state),
-            Self::Nil => (-1).hash(state),
-            Self::True => 0.hash(state),
-            Self::False => 1.hash(state),
             Self::Symbol(s) => s.hash(state),
             Self::List(v) => v.hash(state),
             Self::Vec(v) => v.hash(state),
@@ -189,6 +179,7 @@ impl Hash for MalType {
                     .flatten().collect_vec();
                 v.hash(state)
             },
+            x => std::mem::discriminant(x).hash(state),
         };
     }
 }
