@@ -19,7 +19,7 @@ fn main() {
 
 fn rep(s: &str) -> String {
     match READ(s) {
-        Ok(mal_type) => PRINT(&EVAL(&mal_type)),
+        Ok(maltype) => PRINT(&EVAL(&maltype)),
         Err(err) => {
             eprintln!("{}", err);
             "".to_string()
@@ -31,10 +31,10 @@ fn READ(s: &str) -> Result<MalType> {
     reader::read_str(s)
 }
 
-fn EVAL(mal_types: &MalType) -> MalType {
-    mal_types.clone()
+fn EVAL(maltypes: &MalType) -> MalType {
+    maltypes.clone()
 }
 
-fn PRINT(mal_type: &MalType) -> String {
-    printer::pr_str(mal_type)
+fn PRINT(maltype: &MalType) -> String {
+    printer::pr_str(maltype)
 }

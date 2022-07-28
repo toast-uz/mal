@@ -7,6 +7,18 @@ use regex::Regex;
 
 const PREFIX_KEYWORD: &str = "\u{029e}";
 
+const NAME2MALTYPE: [(&'static str, &MalType); 9] = [
+    ("(", &MalType::Lparen),
+    (")", &MalType::Rparen),
+    ("[", &MalType::Lsqure),
+    ("]", &MalType::Rsqure),
+    ("{", &MalType::Lcurly),
+    ("}", &MalType::Rcurly),
+    ("nil", &MalType::Nil),
+    ("true", &MalType::True),
+    ("false", &MalType::False),
+];
+
 type Result<T> = std::result::Result<T, MalError>;
 
 #[macro_export]
@@ -30,26 +42,12 @@ impl fmt::Display for Token {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MalType {
-    Comment,
-    Lparen,
-    Rparen,
-    Lsqure,
-    Rsqure,
-    Lcurly,
-    Rcurly,
-    Int(i64),
-    Float(f64),
-    String(String),
-    Nil,
-    True,
-    False,
-    Keyword(String),
-    Symbol(String),
-    List(Vec<MalType>),
-    Vec(Vec<MalType>),
-    HashMap(HashMap<MalType, MalType>),
+    Comment, Nil, True, False, Int(i64), Float(f64),
+    Lparen, Rparen, Lsqure, Rsqure, Lcurly, Rcurly,
+    String(String), Keyword(String), Symbol(String),
+    List(Vec<MalType>), Vec(Vec<MalType>), HashMap(HashMap<MalType, MalType>),
 }
 
 impl MalType {
@@ -67,8 +65,10 @@ impl MalType {
             _ => unreachable!(),
         }
     }
+
     pub fn from_token(token: &Token) -> Result<Self> {
         let s = token.to_string();
+        let name2maltype: HashMap<&str, &MalType> = NAME2MALTYPE.iter().cloned().collect();
         let string_re = Regex::new(r"\x22(?:[\\].|[^\\\x22])*\x22").unwrap();
         if let Some(';') = s.chars().next() {
             Ok(Self::Comment)
@@ -83,15 +83,7 @@ impl MalType {
         } else if let Some(':') = s.chars().next() {
             Ok(Self::Keyword(s[1..].to_string()))
         } else { match &s as &str {
-            "(" => Ok(Self::Lparen),
-            ")" => Ok(Self::Rparen),
-            "[" => Ok(Self::Lsqure),
-            "]" => Ok(Self::Rsqure),
-            "{" => Ok(Self::Lcurly),
-            "}" => Ok(Self::Rcurly),
-            "nil" => Ok(Self::Nil),
-            "true" => Ok(Self::True),
-            "false" => Ok(Self::False),
+            x if name2maltype.contains_key(x) => Ok(name2maltype[x].clone()),
             x => Ok(Self::Symbol(x.to_string())),
         } }
     }
@@ -115,21 +107,15 @@ impl MalType {
     }
 
     pub fn to_string(&self) -> String {
+        let maltype2name: HashMap<&MalType, &str> = NAME2MALTYPE.iter().cloned()
+            .map(|(k, v)| (v, k)).collect();
         match self {
             Self::Comment => "".to_string(),
-            Self::Lparen => "(".to_string(),
-            Self::Rparen => ")".to_string(),
-            Self::Lsqure => "[".to_string(),
-            Self::Rsqure => "]".to_string(),
-            Self::Lcurly => "{".to_string(),
-            Self::Rcurly => "}".to_string(),
+            x if maltype2name.contains_key(&x) => maltype2name[&*x].to_string(),
             Self::Int(num) => format!("{}", num),
             Self::Float(num) => format!("{}", num),
             Self::String(s) => format!("\"{}\"", s),
             Self::Keyword(s) => format!(":{}", s),
-            Self::Nil => "nil".to_string(),
-            Self::True => "true".to_string(),
-            Self::False => "false".to_string(),
             Self::Symbol(s) => s.to_string(),
             Self::List(v) =>
                 format!("({})", v.iter().map(|x| x.to_string()).join(" ")),
@@ -138,6 +124,7 @@ impl MalType {
             Self::HashMap(hm) =>
                 format!("{{{}}}",
                     hm.iter().map(|(k, v)| vec![k, v]).flatten().join(" ")),
+            _ => unreachable!(),
         }
     }
 }
@@ -149,20 +136,6 @@ impl fmt::Display for MalType {
 }
 
 impl Eq for MalType { }
-
-impl PartialEq for MalType {
-    fn eq(&self, other: &MalType) -> bool {
-        match self {
-            Self::Lparen => match other { Self::Lparen => true, _=> false, },
-            Self::Rparen => match other { Self::Rparen => true, _=> false, },
-            Self::Lsqure => match other { Self::Lsqure => true, _=> false, },
-            Self::Rsqure => match other { Self::Rsqure => true, _=> false, },
-            Self::Lcurly => match other { Self::Lcurly => true, _=> false, },
-            Self::Rcurly => match other { Self::Rcurly => true, _=> false, },
-            _ => false,
-        }
-    }
-}
 
 impl Hash for MalType {
     fn hash<H: Hasher>(&self, state: &mut H) {

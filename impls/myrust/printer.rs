@@ -1,5 +1,5 @@
 use crate::types::*;
 
-pub fn pr_str(mal_type: &MalType) -> String {
-    format!("{}", mal_type)
+pub fn pr_str(maltype: &MalType) -> String {
+    format!("{}", maltype)
 }

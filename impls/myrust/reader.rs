@@ -81,7 +81,7 @@ fn read_hash_map(reader: &mut Reader) -> Result<MalType> {
     res
 }
 
-const MAP_SYMBOL: [(&str, &str); 6] = [
+const NAME2SYMBOL: [(&str, &str); 6] = [
     ("'", "quote"),
     ("`", "quasiquote"),
     ("~", "unquote"),
@@ -94,16 +94,16 @@ const MAP_SYMBOL: [(&str, &str); 6] = [
 // and switch on the first character of that token.
 // The return value from read_form is a mal data type.
 pub fn read_form(reader: &mut Reader) -> Result<MalType> {
-    let map_symbol: HashMap<&str, &str> = MAP_SYMBOL.iter().cloned().collect();
+    let name2symbol: HashMap<&str, &str> = NAME2SYMBOL.iter().cloned().collect();
     match MalType::from_token(&reader.peek().unwrap())? {
-        MalType::Symbol(x) if map_symbol.contains_key(&*x) => {
+        MalType::Symbol(x) if name2symbol.contains_key(&*x) => {
             reader.next();
-            if map_symbol[&*x] == "with-meta" {
+            if name2symbol[&*x] == "with-meta" {
                 let meta = read_form(reader)?;
-                Ok(MalType::List(vec![MalType::Symbol(map_symbol[&*x].to_string()),
+                Ok(MalType::List(vec![MalType::Symbol(name2symbol[&*x].to_string()),
                     read_form(reader)?, meta]))
             } else {
-                Ok(MalType::List(vec![MalType::Symbol(map_symbol[&*x].to_string()),
+                Ok(MalType::List(vec![MalType::Symbol(name2symbol[&*x].to_string()),
                     read_form(reader)?]))
             }
         },
