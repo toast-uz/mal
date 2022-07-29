@@ -7,7 +7,7 @@ use regex::Regex;
 
 const PREFIX_KEYWORD: &str = "\u{029e}";
 
-const NAME2MALTYPE: [(&'static str, &MalType); 9] = [
+const NAME2MALTYPE: [(&str, &MalType); 9] = [
     ("(", &MalType::Lparen),
     (")", &MalType::Rparen),
     ("[", &MalType::Lsqure),
