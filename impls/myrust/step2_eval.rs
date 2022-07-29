@@ -85,7 +85,7 @@ macro_rules! malfunc {
                     (MalType::Int(x), MalType::Float(y)) => MalType::Float((x as f64).$f(&y)),
                     (MalType::Float(x), MalType::Int(y)) => MalType::Float(x.$f(&(y as f64))),
                     (MalType::Float(x), MalType::Float(y)) => MalType::Float(x.$f(&y)),
-                    (x, y) => panic!("Cannot add between {} and {}", x, y),
+                    (x, y) => panic!("Cannot calc between {} and {}", x, y),
                 }
             }
         }
