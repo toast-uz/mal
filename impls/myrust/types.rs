@@ -122,8 +122,7 @@ impl MalType {
             Self::Vec(v) =>
                 format!("[{}]", v.iter().map(|x| x.to_string()).join(" ")),
             Self::HashMap(hm) =>
-                format!("{{{}}}",
-                    hm.iter().map(|(k, v)| vec![k, v]).flatten().join(" ")),
+                format!("{{{}}}", hm.iter().map(|(k, v)| vec![k, v]).flatten().join(" ")),
             _ => unreachable!(),
         }
     }
@@ -148,7 +147,8 @@ impl Hash for MalType {
             Self::List(v) => v.hash(state),
             Self::Vec(v) => v.hash(state),
             Self::HashMap(hm) => {
-                let v = hm.iter().map(|(k, v)| vec![k, v])
+                let v = hm.iter()
+                    .map(|(k, v)| vec![k, v])
                     .flatten().collect_vec();
                 v.hash(state)
             },

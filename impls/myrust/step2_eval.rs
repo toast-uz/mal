@@ -51,9 +51,7 @@ fn eval_ast(maltype: &MalType) -> Result<MalType> {
         },
         MalType::HashMap(hm) => {
             let mut hm_maltype: HashMap::<MalType, MalType> = HashMap::new();
-            for (k, v) in hm {
-                hm_maltype.insert(k.clone(), eval_ast(v)?);
-            }
+            for (k, v) in hm { hm_maltype.insert(k.clone(), eval_ast(v)?); }
             Ok(MalType::HashMap(hm_maltype))
         },
         _ => Ok(maltype.clone()),
