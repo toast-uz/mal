@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use types::*;
 
 type Result<T> = std::result::Result<T, MalError>;
+type MulFunc = Box<dyn Fn(&[MalType]) -> Result<MalType>>;
 
 fn main() {
     loop {
@@ -20,7 +21,13 @@ fn main() {
 }
 
 fn rep(s: &str) -> String {
-    READ(s).and_then(|x| EVAL(&x)).and_then(|x| PRINT(&x))
+    let mut repl_env: HashMap<&str, MulFunc> = HashMap::new();
+    repl_env.insert("+", Box::new(add));
+    repl_env.insert("-", Box::new(sub));
+    repl_env.insert("*", Box::new(mul));
+    repl_env.insert("/", Box::new(div));
+
+    READ(s).and_then(|x| EVAL(&x, &repl_env)).and_then(|x| PRINT(&x))
         .unwrap_or_else(|msg| { eprintln!("{}", msg); "".to_string() })
 }
 
@@ -28,8 +35,8 @@ fn READ(s: &str) -> Result<MalType> {
     reader::read_str(s)
 }
 
-fn EVAL(maltype: &MalType) -> Result<MalType> {
-    eval_ast(maltype)
+fn EVAL(maltype: &MalType, repl_env: &HashMap<&str, MulFunc>) -> Result<MalType> {
+    eval_ast(maltype, repl_env)
 }
 
 fn PRINT(maltype: &MalType) -> Result<String> {
@@ -38,60 +45,51 @@ fn PRINT(maltype: &MalType) -> Result<String> {
 
 /* step2_eval */
 
-fn eval_ast(maltype: &MalType) -> Result<MalType> {
+fn eval_ast(maltype: &MalType, repl_env: &HashMap<&str, MulFunc>) -> Result<MalType> {
     match maltype {
         MalType::List(v) if v.is_empty() => Ok(maltype.clone()),
         MalType::List(v) => {
-            let maltypes = v.into_iter().map(|x| eval_ast(x)).collect::<Result<Vec<_>>>()?;
-            eval_func(&maltypes[0], &maltypes[1..].to_vec())
+            let maltypes = v.into_iter().map(|x| eval_ast(x, repl_env)).collect::<Result<Vec<_>>>()?;
+            match maltypes.first().cloned() {
+                Some(MalType::Symbol(s)) => {
+                    let f = repl_env.get(&*s).ok_or_else(|| malerr!("Symbol \"{}\" is not defined.", s))?;
+                    f(&maltypes[1..])  // length of args can be 0
+                },
+                _ => Err(malerr!("Cannot eval not a symbol.")),
+            }
         },
         MalType::Vec(v) => {
-            let maltypes: Result<Vec<_>> = v.into_iter().map(|x| eval_ast(x)).collect();
+            let maltypes: Result<Vec<_>> = v.into_iter().map(|x| eval_ast(x, repl_env)).collect();
             Ok(MalType::Vec(maltypes?))
         },
         MalType::HashMap(hm) => {
             let mut hm_maltype: HashMap::<MalType, MalType> = HashMap::new();
-            for (k, v) in hm { hm_maltype.insert(k.clone(), eval_ast(v)?); }
+            for (k, v) in hm { hm_maltype.insert(k.clone(), eval_ast(v, repl_env)?); }
             Ok(MalType::HashMap(hm_maltype))
         },
         _ => Ok(maltype.clone()),
     }
 }
 
-fn eval_func(func: &MalType, args: &Vec<MalType>) -> Result<MalType> {
-    if let MalType::Symbol(s) = func {
-        match s as &str {
-            _ if args.len() != 2 => Err(malerr!("Illegal number: {} of args.", args.len())),
-            "+" => Ok(args[0].clone() + args[1].clone()),
-            "-" => Ok(args[0].clone() - args[1].clone()),
-            "*" => Ok(args[0].clone() * args[1].clone()),
-            "/" => Ok(args[0].clone() / args[1].clone()),
-            _ => Err(malerr!("Unknown Symbol: \"{}\"", func)),
-        }
-    } else {
-        Err(malerr!("List must begin a Symbol, but found {}", func))
-    }
-}
-
-macro_rules! malfunc {
-    ( $t:ident, $f:ident ) => (
-        impl $t for MalType {
-            type Output = Self;
-            fn $f(self, other: Self) -> Self::Output {
-                match (self, other) {
-                    (MalType::Int(x), MalType::Int(y)) => MalType::Int(x.$f(&y)),
-                    (MalType::Int(x), MalType::Float(y)) => MalType::Float((x as f64).$f(&y)),
-                    (MalType::Float(x), MalType::Int(y)) => MalType::Float(x.$f(&(y as f64))),
-                    (MalType::Float(x), MalType::Float(y)) => MalType::Float(x.$f(&y)),
-                    (x, y) => panic!("Cannot calc between {} and {}", x, y),
-                }
+macro_rules! malfunc_binomial_number {
+    ( $s:expr, $f:ident ) => (
+        fn $f(v: &[MalType]) -> Result<MalType> {
+            if v.len() != 2 { return Err(malerr!(
+                "Illegal number of args: {} for the binomial operator \"{}\".", v.len(), $s)
+            ); }
+            let (x, y) = (v[0].clone(), v[1].clone());
+            match (x, y) {
+                (MalType::Int(x), MalType::Int(y)) => Ok(MalType::Int(x.$f(&y))),
+                (MalType::Int(x), MalType::Float(y)) => Ok(MalType::Float((x as f64).$f(&y))),
+                (MalType::Float(x), MalType::Int(y)) => Ok(MalType::Float(x.$f(&(y as f64)))),
+                (MalType::Float(x), MalType::Float(y)) => Ok(MalType::Float(x.$f(&y))),
+                (x, y) => Err(malerr!("Cannot calc \"{}\" between {} and {}", $s, x, y)),
             }
         }
     )
 }
 
-malfunc!(Add, add);
-malfunc!(Sub, sub);
-malfunc!(Mul, mul);
-malfunc!(Div, div);
-
+malfunc_binomial_number!("+", add);
+malfunc_binomial_number!("-", sub);
+malfunc_binomial_number!("*", mul);
+malfunc_binomial_number!("/", div);
