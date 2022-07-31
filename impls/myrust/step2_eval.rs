@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use types::*;
 
 type Result<T> = std::result::Result<T, MalError>;
-type MulFunc = Box<dyn Fn(&[MalType]) -> Result<MalType>>;
+type MalFunc = Box<dyn Fn(&[MalType]) -> Result<MalType>>;
 
 fn main() {
     loop {
@@ -21,7 +21,7 @@ fn main() {
 }
 
 fn rep(s: &str) -> String {
-    let mut repl_env: HashMap<&str, MulFunc> = HashMap::new();
+    let mut repl_env: HashMap<&str, MalFunc> = HashMap::new();
     repl_env.insert("+", Box::new(add));
     repl_env.insert("-", Box::new(sub));
     repl_env.insert("*", Box::new(mul));
@@ -35,7 +35,7 @@ fn READ(s: &str) -> Result<MalType> {
     reader::read_str(s)
 }
 
-fn EVAL(maltype: &MalType, repl_env: &HashMap<&str, MulFunc>) -> Result<MalType> {
+fn EVAL(maltype: &MalType, repl_env: &HashMap<&str, MalFunc>) -> Result<MalType> {
     eval_ast(maltype, repl_env)
 }
 
@@ -45,7 +45,7 @@ fn PRINT(maltype: &MalType) -> Result<String> {
 
 /* step2_eval */
 
-fn eval_ast(maltype: &MalType, repl_env: &HashMap<&str, MulFunc>) -> Result<MalType> {
+fn eval_ast(maltype: &MalType, repl_env: &HashMap<&str, MalFunc>) -> Result<MalType> {
     match maltype {
         MalType::List(v) if v.is_empty() => Ok(maltype.clone()),
         MalType::List(v) => {
