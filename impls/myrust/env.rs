@@ -20,9 +20,11 @@ impl<'a> Env<'a> {
     // then return the environment. If no key is found and outer is not nil
     // then call find (recurse) on the outer environment.
     fn find(&self, key: &str) -> Option<&'a Env> {
-        let env = Env::new(Some(self));
-        while let Some(env) = env.outer {
+        let mut env = self;
+        loop {
             if env.data.contains_key(key) { return Some(env); }
+            if env.outer.is_none() { break; }
+            env = env.outer.unwrap();
         }
         None
     }
