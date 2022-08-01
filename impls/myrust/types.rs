@@ -20,7 +20,6 @@ const NAME2MALTYPE: [(&str, &MalType); 9] = [
 ];
 
 pub type Result<T> = std::result::Result<T, MalError>;
-pub type MalFunc<'a> = (&'a str, &'a dyn Fn(&[MalType]) -> Result<MalType>);
 
 #[macro_export]
 macro_rules! malerr {
@@ -28,6 +27,8 @@ macro_rules! malerr {
         MalError::new(&format!($( $x ),* ))
     )
 }
+
+// ----------- Token -----------
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token(String);
@@ -42,6 +43,8 @@ impl fmt::Display for Token {
         write!(f, "{}", self.to_string())
     }
 }
+
+// ----------- MalType -----------
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MalType {
@@ -157,6 +160,21 @@ impl Hash for MalType {
         };
     }
 }
+
+// ----------- MalFunc -----------
+
+pub struct MalFunc<'a> {
+    pub name: &'a str,
+    pub f: &'a dyn Fn(&[MalType]) -> Result<MalType>,
+}
+
+impl<'a> fmt::Debug for MalFunc<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "MulFunc {{{}}}", self.name)
+    }
+}
+
+// ----------- MalError -----------
 
 #[derive(Debug, Clone)]
 pub struct MalError {
