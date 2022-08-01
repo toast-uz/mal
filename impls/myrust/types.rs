@@ -19,7 +19,8 @@ const NAME2MALTYPE: [(&str, &MalType); 9] = [
     ("false", &MalType::False),
 ];
 
-type Result<T> = std::result::Result<T, MalError>;
+pub type Result<T> = std::result::Result<T, MalError>;
+pub type MalFunc<'a> = (&'a str, &'a dyn Fn(&[MalType]) -> Result<MalType>);
 
 #[macro_export]
 macro_rules! malerr {

@@ -8,9 +8,6 @@ use std::ops::{Add, Sub, Mul, Div};
 use std::collections::HashMap;
 use types::*;
 
-type Result<T> = std::result::Result<T, MalError>;
-type MalFunc = Box<dyn Fn(&[MalType]) -> Result<MalType>>;
-
 fn main() {
     loop {
         let mut s = String::new();
@@ -22,10 +19,10 @@ fn main() {
 
 fn rep(s: &str) -> String {
     let mut repl_env: HashMap<&str, MalFunc> = HashMap::new();
-    repl_env.insert("+", Box::new(add));
-    repl_env.insert("-", Box::new(sub));
-    repl_env.insert("*", Box::new(mul));
-    repl_env.insert("/", Box::new(div));
+    repl_env.insert("+", ("+", &add));
+    repl_env.insert("-", ("+", &sub));
+    repl_env.insert("*", ("+", &mul));
+    repl_env.insert("/", ("+", &div));
 
     READ(s).and_then(|x| EVAL(&x, &repl_env)).and_then(|x| PRINT(&x))
         .unwrap_or_else(|msg| { eprintln!("{}", msg); "".to_string() })
@@ -52,7 +49,8 @@ fn eval_ast(maltype: &MalType, repl_env: &HashMap<&str, MalFunc>) -> Result<MalT
             let maltypes = v.into_iter().map(|x| eval_ast(x, repl_env)).collect::<Result<Vec<_>>>()?;
             match maltypes.first().cloned() {
                 Some(MalType::Symbol(s)) => {
-                    let f = repl_env.get(&*s).ok_or_else(|| malerr!("Symbol \"{}\" is not defined.", s))?;
+                    let f = repl_env.get(&*s)
+                        .ok_or_else(|| malerr!("Symbol \"{}\" is not defined.", s))?.1;
                     f(&maltypes[1..])  // length of args can be 0
                 },
                 _ => Err(malerr!("Cannot eval not a symbol.")),

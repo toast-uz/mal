@@ -4,8 +4,6 @@ use regex::Regex;
 use crate::types::*;
 use crate::malerr;
 
-type Result<T> = std::result::Result<T, MalError>;
-
 #[derive(Debug, Clone)]
 pub struct Reader {
     tokens: Vec<Token>,
