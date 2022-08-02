@@ -5,6 +5,7 @@ mod types;
 mod env;
 
 use std::io::{stdin, stdout, Write};
+use std::rc::Rc;
 use std::ops::{Add, Sub, Mul, Div};
 use std::collections::HashMap;
 use types::*;
@@ -19,12 +20,12 @@ use env::*;
     }
 }
 
-fn rep(s: &str) -> String {
+fn rep<'a>(s: &str) -> String {
     let mut repl_env: Env = Env::new(None);
-    repl_env.set("+", &MalFunc{name: "+", f: &add});
-    repl_env.set("-", &MalFunc{name: "-", f: &sub});
-    repl_env.set("*", &MalFunc{name: "*", f: &mul});
-    repl_env.set("/", &MalFunc{name: "/", f: &div});
+    repl_env.set("+", &MalFunc::new("+", Rc::new(add)));
+    repl_env.set("-", &MalFunc::new("-", Rc::new(sub)));
+    repl_env.set("*", &MalFunc::new("*", Rc::new(mul)));
+    repl_env.set("/", &MalFunc::new("/", Rc::new(div)));
 
     READ(s).and_then(|x| EVAL(&x, &repl_env)).and_then(|x| PRINT(&x))
         .unwrap_or_else(|msg| { eprintln!("{}", msg); "".to_string() })

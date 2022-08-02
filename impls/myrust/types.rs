@@ -1,5 +1,6 @@
 use std::error;
 use std::fmt;
+use std::rc::Rc;
 use std::hash::{Hash, Hasher};
 use std::collections::HashMap;
 use itertools::Itertools;
@@ -163,14 +164,21 @@ impl Hash for MalType {
 
 // ----------- MalFunc -----------
 
-pub struct MalFunc<'a> {
-    pub name: &'a str,
-    pub f: &'a dyn Fn(&[MalType]) -> Result<MalType>,
+#[derive(Clone)]
+pub struct MalFunc {
+    pub name: String,
+    pub f: Rc<dyn Fn(&[MalType]) -> Result<MalType>>,
 }
 
-impl<'a> fmt::Debug for MalFunc<'a> {
+impl MalFunc {
+    pub fn new(name: &str, f: Rc<dyn Fn(&[MalType]) -> Result<MalType>>) -> Self {
+        Self{ name: name.to_string(), f: f.clone() }
+    }
+}
+
+impl fmt::Debug for MalFunc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "MulFunc {{{}}}", self.name)
+        write!(f, "{}", self.name)
     }
 }
 

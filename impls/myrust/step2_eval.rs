@@ -4,6 +4,7 @@ mod printer;
 mod types;
 
 use std::io::{stdin, stdout, Write};
+use std::rc::Rc;
 use std::ops::{Add, Sub, Mul, Div};
 use std::collections::HashMap;
 use types::*;
@@ -18,11 +19,11 @@ fn main() {
 }
 
 fn rep(s: &str) -> String {
-    let mut repl_env: HashMap<&str, MalFunc> = HashMap::new();
-    repl_env.insert("+", MalFunc{name: "+", f: &add});
-    repl_env.insert("-", MalFunc{name: "-", f: &sub});
-    repl_env.insert("*", MalFunc{name: "*", f: &mul});
-    repl_env.insert("/", MalFunc{name: "/", f: &div});
+    let mut repl_env: HashMap<String, MalFunc> = HashMap::new();
+    repl_env.insert("+".to_string(), MalFunc::new("+", Rc::new(add)));
+    repl_env.insert("-".to_string(), MalFunc::new("-", Rc::new(sub)));
+    repl_env.insert("*".to_string(), MalFunc::new("*", Rc::new(mul)));
+    repl_env.insert("/".to_string(), MalFunc::new("/", Rc::new(div)));
 
     READ(s).and_then(|x| EVAL(&x, &repl_env)).and_then(|x| PRINT(&x))
         .unwrap_or_else(|msg| { eprintln!("{}", msg); "".to_string() })
@@ -32,7 +33,7 @@ fn READ(s: &str) -> Result<MalType> {
     reader::read_str(s)
 }
 
-fn EVAL(maltype: &MalType, repl_env: &HashMap<&str, MalFunc>) -> Result<MalType> {
+fn EVAL(maltype: &MalType, repl_env: &HashMap<String, MalFunc>) -> Result<MalType> {
     eval_ast(maltype, repl_env)
 }
 
@@ -42,7 +43,7 @@ fn PRINT(maltype: &MalType) -> Result<String> {
 
 /* step2_eval */
 
-fn eval_ast(maltype: &MalType, repl_env: &HashMap<&str, MalFunc>) -> Result<MalType> {
+fn eval_ast(maltype: &MalType, repl_env: &HashMap<String, MalFunc>) -> Result<MalType> {
     match maltype {
         MalType::List(v) if v.is_empty() => Ok(maltype.clone()),
         MalType::List(v) => {
@@ -50,7 +51,7 @@ fn eval_ast(maltype: &MalType, repl_env: &HashMap<&str, MalFunc>) -> Result<MalT
             match maltypes.first().cloned() {
                 Some(MalType::Symbol(s)) => {
                     let f = repl_env.get(&*s)
-                        .ok_or_else(|| malerr!("Symbol \"{}\" is not defined.", s))?.f;
+                        .ok_or_else(|| malerr!("Symbol \"{}\" is not defined.", s)).cloned()?.f;
                     f(&maltypes[1..])  // length of args can be 0
                 },
                 _ => Err(malerr!("Cannot eval not a symbol.")),

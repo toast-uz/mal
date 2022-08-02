@@ -5,15 +5,15 @@ use crate::malerr;
 #[derive(Debug, Clone)]
 pub struct Env<'a> {
     outer: Option<&'a Env<'a>>,
-    data: HashMap<&'a str, &'a MalFunc<'a>>,
+    data: HashMap<String, MalFunc>,
 }
 
 impl<'a> Env<'a> {
     pub fn new(outer: Option<&'a Env>) -> Self { Self { outer: outer, data: HashMap::new(), } }
 
     // takes a symbol key and a mal value and adds to the data structure
-    pub fn set(&mut self, key: &'a str, value: &'a MalFunc<'a>) {
-        self.data.insert(key, value);
+    pub fn set(&mut self, key: &str, value: &MalFunc) {
+        self.data.insert(key.to_string(), value.clone());
     }
 
     // takes a symbol key and if the current environment contains that key
@@ -32,7 +32,7 @@ impl<'a> Env<'a> {
     // takes a symbol key and uses the find method to locate the environment with the key,
     // then returns the matching value.
     // If no key is found up the outer chain, then throws/raises a "not found" error.
-    pub fn get(&self, key: &str) -> Result<&MalFunc> {
+    pub fn get(&self, key: &str) -> Result<MalFunc> {
         self.find(key).and_then(|env| env.data.get(key).cloned())
             .ok_or_else(|| malerr!("{} is not found.", key))
     }
