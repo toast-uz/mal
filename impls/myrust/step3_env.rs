@@ -27,7 +27,7 @@ fn rep<'a>(s: &str) -> String {
     repl_env.set("*", &MalFunc::new("*", Rc::new(mul)));
     repl_env.set("/", &MalFunc::new("/", Rc::new(div)));
 
-    READ(s).and_then(|x| EVAL(&x, &repl_env)).and_then(|x| PRINT(&x))
+    READ(s).and_then(|x| EVAL(&x, &mut repl_env)).and_then(|x| PRINT(&x))
         .unwrap_or_else(|msg| { eprintln!("{}", msg); "".to_string() })
 }
 
@@ -35,7 +35,23 @@ fn READ(s: &str) -> Result<MalType> {
     reader::read_str(s)
 }
 
-fn EVAL(maltype: &MalType, repl_env: &Env) -> Result<MalType> {
+fn EVAL<'a>(maltype: &MalType, repl_env: &mut Env<'a>) -> Result<MalType> {
+    if let MalType::List(v) = maltype.clone() {
+        if let Some(MalType::Symbol(s)) = v.first() {
+            if s == "!def" {
+                if v.len() != 3 {
+                    return Err(malerr!("Illegal number of args: {} for \"!def\".", v.len() - 1));
+                }
+                if let MalType::Symbol(t) = &v[1].clone() {
+                    repl_env.set(t, &MalFunc::new(t,
+                            Rc::new(move |_| Ok(v[2].clone()))));
+                    return eval_ast(&MalType::Symbol(t.to_string()), repl_env);
+                }
+            } else if s == "let" {
+
+            }
+        }
+    }
     eval_ast(maltype, repl_env)
 }
 
@@ -66,6 +82,7 @@ fn eval_ast(maltype: &MalType, repl_env: &Env) -> Result<MalType> {
             for (k, v) in hm { hm_maltype.insert(k.clone(), eval_ast(v, repl_env)?); }
             Ok(MalType::HashMap(hm_maltype))
         },
+//        MalType::Symbol(s) =>(repl_env.get(&*s)?.f)(&[MalType::Nil]),
         _ => Ok(maltype.clone()),
     }
 }
@@ -92,3 +109,4 @@ malfunc_binomial_number!("+", add);
 malfunc_binomial_number!("-", sub);
 malfunc_binomial_number!("*", mul);
 malfunc_binomial_number!("/", div);
+
