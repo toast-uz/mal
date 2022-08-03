@@ -165,18 +165,18 @@ impl Hash for MalType {
 // ----------- MalFunc -----------
 
 #[derive(Clone)]
-pub struct MalFunc<'a>{
+pub struct MalFunc{
     pub name: String,
-    pub f: Rc<dyn Fn(&[MalType]) -> Result<MalType> + 'a>,
+    pub f: Rc<dyn Fn(&[MalType]) -> Result<MalType>>,
 }
 
-impl<'a> MalFunc<'a>{
-    pub fn new(name: &str, f: Rc<dyn Fn(&[MalType]) -> Result<MalType> + 'a>) -> Self {
+impl<'a> MalFunc{
+    pub fn new(name: &str, f: Rc<dyn Fn(&[MalType]) -> Result<MalType>>) -> Self {
         Self{ name: name.to_string(), f: f.clone() }
     }
 }
 
-impl<'a> fmt::Debug for MalFunc<'a>{
+impl<'a> fmt::Debug for MalFunc{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
     }

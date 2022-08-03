@@ -5,14 +5,14 @@ use crate::malerr;
 #[derive(Debug, Clone)]
 pub struct Env<'a> {
     outer: Option<&'a Env<'a>>,
-    data: HashMap<String, MalFunc<'a>>,
+    data: HashMap<String, MalFunc>,
 }
 
 impl<'a> Env<'a> {
     pub fn new(outer: Option<&'a Env>) -> Self { Self { outer: outer, data: HashMap::new(), } }
 
     // takes a symbol key and a mal value and adds to the data structure
-    pub fn set(&mut self, key: &str, value: &MalFunc<'a>) {
+    pub fn set(&mut self, key: &str, value: &MalFunc) {
         self.data.insert(key.to_string(), value.clone());
     }
 
