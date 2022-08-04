@@ -5,14 +5,14 @@ use crate::malerr;
 #[derive(Debug, Clone)]
 pub struct Env<'a> {
     outer: Option<&'a Env<'a>>,
-    data: HashMap<String, MalFunc>,
+    data: HashMap<String, MalType>,
 }
 
 impl<'a> Env<'a> {
     pub fn new(outer: Option<&'a Env>) -> Self { Self { outer: outer, data: HashMap::new(), } }
 
     // takes a symbol key and a mal value and adds to the data structure
-    pub fn set(&mut self, key: &str, value: &MalFunc) {
+    pub fn set(&mut self, key: &str, value: &MalType) {
         self.data.insert(key.to_string(), value.clone());
     }
 
@@ -32,8 +32,8 @@ impl<'a> Env<'a> {
     // takes a symbol key and uses the find method to locate the environment with the key,
     // then returns the matching value.
     // If no key is found up the outer chain, then throws/raises a "not found" error.
-    pub fn get(&self, key: &str) -> Result<MalFunc> {
+    pub fn get(&self, key: &str) -> Result<MalType> {
         self.find(key).and_then(|env| env.data.get(key).cloned())
-            .ok_or_else(|| malerr!("{} is not found.", key))
+            .ok_or_else(|| malerr!("'{}' not found.", key))
     }
 }

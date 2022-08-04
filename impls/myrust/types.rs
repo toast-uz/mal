@@ -47,12 +47,14 @@ impl fmt::Display for Token {
 
 // ----------- MalType -----------
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum MalType {
     Comment, Nil, True, False, Int(i64), Float(f64),
     Lparen, Rparen, Lsqure, Rsqure, Lcurly, Rcurly,
     String(String), Keyword(String), Symbol(String),
     List(Vec<MalType>), Vec(Vec<MalType>), HashMap(HashMap<MalType, MalType>),
+    Fn(MalFunc),
 }
 
 impl MalType {
@@ -128,6 +130,7 @@ impl MalType {
                 format!("[{}]", v.iter().map(|x| x.to_string()).join(" ")),
             Self::HashMap(hm) =>
                 format!("{{{}}}", hm.iter().map(|(k, v)| vec![k, v]).flatten().join(" ")),
+            Self::Fn(f) => format!("{}", f.name),
             _ => unreachable!(),
         }
     }
@@ -157,6 +160,7 @@ impl Hash for MalType {
                     .flatten().collect_vec();
                 v.hash(state)
             },
+            Self::Fn(f) => f.name.hash(state),
             x => std::mem::discriminant(x).hash(state),
         };
     }
@@ -170,17 +174,23 @@ pub struct MalFunc{
     pub f: Rc<dyn Fn(&[MalType]) -> Result<MalType>>,
 }
 
-impl<'a> MalFunc{
+impl MalFunc{
     pub fn new(name: &str, f: Rc<dyn Fn(&[MalType]) -> Result<MalType>>) -> Self {
         Self{ name: name.to_string(), f: f.clone() }
     }
 }
 
-impl<'a> fmt::Debug for MalFunc{
+impl fmt::Debug for MalFunc{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
     }
 }
+
+impl PartialEq for MalFunc {
+    fn eq(&self, other: &Self) -> bool { self.name == other.name }
+}
+
+impl Eq for MalFunc { }
 
 // ----------- MalError -----------
 

@@ -12,23 +12,23 @@ use types::*;
 use env::*;
 
  fn main() {
+    let mut repl_env: Env = Env::new(None);
     loop {
         let mut s = String::new();
         print!("user> "); stdout().flush().unwrap();
         if let Ok(0) = stdin().read_line(&mut s) { break; }
-        println!("{}", rep(&s));
+        println!("{}", rep(&s, &mut repl_env));
     }
 }
 
-fn rep<'a>(s: &str) -> String {
-    let mut repl_env: Env = Env::new(None);
-    repl_env.set("+", &MalFunc::new("+", Rc::new(add)));
-    repl_env.set("-", &MalFunc::new("-", Rc::new(sub)));
-    repl_env.set("*", &MalFunc::new("*", Rc::new(mul)));
-    repl_env.set("/", &MalFunc::new("/", Rc::new(div)));
+fn rep<'a>(s: &str, repl_env: &mut Env) -> String {
+    repl_env.set("+", &MalType::Fn(MalFunc::new("+", Rc::new(add))));
+    repl_env.set("-", &MalType::Fn(MalFunc::new("-", Rc::new(sub))));
+    repl_env.set("*", &MalType::Fn(MalFunc::new("*", Rc::new(mul))));
+    repl_env.set("/", &MalType::Fn(MalFunc::new("/", Rc::new(div))));
 
-    READ(s).and_then(|x| EVAL(&x, &mut repl_env)).and_then(|x| PRINT(&x))
-        .unwrap_or_else(|msg| { eprintln!("{}", msg); "".to_string() })
+    READ(s).and_then(|x| EVAL(&x, repl_env)).and_then(|x| PRINT(&x))
+        .unwrap_or_else(|msg| { eprintln!("Err: {}", msg); "".to_string() })
 }
 
 fn READ(s: &str) -> Result<MalType> {
@@ -38,17 +38,32 @@ fn READ(s: &str) -> Result<MalType> {
 fn EVAL<'a>(maltype: &MalType, repl_env: &mut Env<'a>) -> Result<MalType> {
     if let MalType::List(v) = maltype.clone() {
         if let Some(MalType::Symbol(s)) = v.first() {
-            if s == "!def" {
-                if v.len() != 3 {
-                    return Err(malerr!("Illegal number of args: {} for \"!def\".", v.len() - 1));
-                }
-                if let MalType::Symbol(t) = &v[1].clone() {
-                    repl_env.set(t, &MalFunc::new(t,
-                            Rc::new(move |_| Ok(v[2].clone()))));
-                    return eval_ast(&MalType::Symbol(t.to_string()), repl_env);
-                }
-            } else if s == "let" {
-
+            if s == "def!" {
+                if v.len() == 3 { if let MalType::Symbol(t) = &v[1].clone() {
+                    let value = EVAL(&v[2].clone(), repl_env)?;
+                    repl_env.set(t, &value);
+                    return EVAL(&v[1].clone(), repl_env);
+                } }
+                return Err(malerr!("Syntax error of 'def!'."));
+            } else if s == "let*" {
+                let mut new_repl_env = Env::new(Some(repl_env));
+                if v.len() == 3 { match v[1].clone() {
+                    MalType::List(v1) | MalType::Vec(v1) if v1.len() % 2 == 0 => {
+                        for x in v1.chunks(2) {
+                            if let MalType::Symbol(t) = &x[0].clone() {
+                                let value = EVAL(&x[1].clone(), &mut new_repl_env)?;
+                                new_repl_env.set(t, &value);
+                            } else {
+                                return Err(malerr!("List of first arg for 'let*' must be Symbols and args."));
+                            }
+                        }
+                        return EVAL(&v[2].clone(), &mut new_repl_env);
+                    },
+                    _ => { return Err(malerr!("The first arg of let* must be a List or Vec with even elems.")); },
+                } }
+                return Err(malerr!("Syntax error of 'let*'."));
+            } else if s == "special" {
+                return Err(malerr!("Special symbol is not implemented."));
             }
         }
     }
@@ -61,28 +76,38 @@ fn PRINT(maltype: &MalType) -> Result<String> {
 
 /* step2_eval */
 
-fn eval_ast(maltype: &MalType, repl_env: &Env) -> Result<MalType> {
+fn eval_ast(maltype: &MalType, repl_env: &mut Env) -> Result<MalType> {
     match maltype {
         MalType::List(v) if v.is_empty() => Ok(maltype.clone()),
         MalType::List(v) => {
-            let maltypes = v.into_iter().map(|x| eval_ast(x, repl_env)).collect::<Result<Vec<_>>>()?;
+            let maltypes = v.into_iter().map(|x| EVAL(x, repl_env)).collect::<Result<Vec<_>>>()?;
             match maltypes.first().cloned() {
                 Some(MalType::Symbol(s)) => {
-                    (repl_env.get(&*s)?.f)(&maltypes[1..])  // length of args can be 0
-                },
+                    let symbol_content = repl_env.get(&*s)?;
+                    match symbol_content {
+                        MalType::Fn(f) => (f.f)(&maltypes[1..]), // length of args can be 0
+                        _ => Err(malerr!("Symbol {} is not a function.", s)),
+                    }
+                }
                 _ => Err(malerr!("Cannot eval not a symbol.")),
             }
         },
         MalType::Vec(v) => {
-            let maltypes: Result<Vec<_>> = v.into_iter().map(|x| eval_ast(x, repl_env)).collect();
+            let maltypes: Result<Vec<_>> = v.into_iter().map(|x| EVAL(x, repl_env)).collect();
             Ok(MalType::Vec(maltypes?))
         },
         MalType::HashMap(hm) => {
             let mut hm_maltype: HashMap::<MalType, MalType> = HashMap::new();
-            for (k, v) in hm { hm_maltype.insert(k.clone(), eval_ast(v, repl_env)?); }
+            for (k, v) in hm { hm_maltype.insert(k.clone(), EVAL(v, repl_env)?); }
             Ok(MalType::HashMap(hm_maltype))
         },
-//        MalType::Symbol(s) =>(repl_env.get(&*s)?.f)(&[MalType::Nil]),
+        MalType::Symbol(s) => {
+            let symbol_content = repl_env.get(&*s)?;
+            match symbol_content {
+                MalType::Fn(_) => Ok(maltype.clone()),
+                _ => EVAL(&symbol_content, repl_env),
+            }
+        },
         _ => Ok(maltype.clone()),
     }
 }
