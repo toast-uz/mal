@@ -73,6 +73,59 @@ impl MalType {
         }
     }
 
+    pub fn type_name(&self) -> String {
+        match self {
+            Self::Comment => "MalType::Comment",
+            Self::Nil => "MalType::Nil",
+            Self::True => "MalType::True",
+            Self::False => "MalType::False",
+            Self::Lparen => "MalType::Lparen",
+            Self::Rparen => "MalType::Rparen",
+            Self::Lsqure => "MalType::Lsqure",
+            Self::Rsqure => "MalType::Rsqure",
+            Self::Lcurly => "MalType::Lcurly",
+            Self::Rcurly => "MalType::Rcurly",
+            Self::Int(_) => "MalType::Int",
+            Self::Float(_) => "MalType::Float",
+            Self::String(_) => "MalType::String",
+            Self::Keyword(_) => "MalType::Keyword",
+            Self::Symbol(_) => "MalType::Symbol",
+            Self::List(_) => "MalType::List",
+            Self::Vec(_) => "MalType::Vec",
+            Self::HashMap(_) => "MalType::HashMap",
+            Self::Fn(_) => "MalType::Fn",
+        }.to_string()
+    }
+
+    pub fn list(&self) -> Option<Vec<MalType>> {
+        match self {
+            MalType::List(v) => Some(v.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn list_or_vec(&self) -> Option<Vec<MalType>> {
+        match self {
+            MalType::List(v) | MalType::Vec(v) => Some(v.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn symbol(&self) -> Option<String> {
+        match self {
+            MalType::Symbol(s) => Some(s.to_string()),
+            _ => None,
+        }
+    }
+
+    pub fn symbol_is(&self, name: &str) -> bool {
+        self.symbol().and_then(|x| Some(&x == name)).unwrap_or(false)
+    }
+
+    pub fn get(&self, i: usize) -> Option<MalType> {
+        self.list().and_then(|v| v.get(i).cloned())
+    }
+
     pub fn from_token(token: &Token) -> Result<Self> {
         let s = token.to_string();
         let name2maltype: HashMap<&str, &MalType> = NAME2MALTYPE.iter().cloned().collect();
@@ -130,7 +183,7 @@ impl MalType {
                 format!("[{}]", v.iter().map(|x| x.to_string()).join(" ")),
             Self::HashMap(hm) =>
                 format!("{{{}}}", hm.iter().map(|(k, v)| vec![k, v]).flatten().join(" ")),
-            Self::Fn(f) => format!("{}", f.name),
+            Self::Fn(f) => format!("#<{}>", f.name),
             _ => unreachable!(),
         }
     }
@@ -174,6 +227,7 @@ pub struct MalFunc{
     pub f: Rc<dyn Fn(&[MalType]) -> Result<MalType>>,
 }
 
+#[allow(dead_code)]
 impl MalFunc{
     pub fn new(name: &str, f: Rc<dyn Fn(&[MalType]) -> Result<MalType>>) -> Self {
         Self{ name: name.to_string(), f: f.clone() }

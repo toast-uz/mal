@@ -36,36 +36,40 @@ fn READ(s: &str) -> Result<MalType> {
 }
 
 fn EVAL<'a>(maltype: &MalType, repl_env: &mut Env<'a>) -> Result<MalType> {
-    if let MalType::List(v) = maltype.clone() {
-        if let Some(MalType::Symbol(s)) = v.first() {
-            if s == "def!" {
-                if v.len() == 3 { if let MalType::Symbol(t) = &v[1].clone() {
-                    let value = EVAL(&v[2].clone(), repl_env)?;
-                    repl_env.set(t, &value);
-                    return EVAL(&v[1].clone(), repl_env);
-                } }
+    match maltype.get(0).and_then(|x| x.symbol()).as_deref() {
+        Some("def!") => {
+            let key = maltype.get(1).and_then(|x| x.symbol());
+            let value = maltype.get(2).clone();
+            if key.is_some() && value.is_some() {
+                let (key, value) = (key.unwrap(), EVAL(&value.unwrap(), repl_env)?);
+                repl_env.set(&key, &value);
+                return EVAL(&MalType::Symbol(key), repl_env);
+            } else {
                 return Err(malerr!("Syntax error of 'def!'."));
-            } else if s == "let*" {
-                let mut new_repl_env = Env::new(Some(repl_env));
-                if v.len() == 3 { match v[1].clone() {
-                    MalType::List(v1) | MalType::Vec(v1) if v1.len() % 2 == 0 => {
-                        for x in v1.chunks(2) {
-                            if let MalType::Symbol(t) = &x[0].clone() {
-                                let value = EVAL(&x[1].clone(), &mut new_repl_env)?;
-                                new_repl_env.set(t, &value);
-                            } else {
-                                return Err(malerr!("List of first arg for 'let*' must be Symbols and args."));
-                            }
-                        }
-                        return EVAL(&v[2].clone(), &mut new_repl_env);
-                    },
-                    _ => { return Err(malerr!("The first arg of let* must be a List or Vec with even elems.")); },
-                } }
-                return Err(malerr!("Syntax error of 'let*'."));
-            } else if s == "special" {
-                return Err(malerr!("Special symbol is not implemented."));
             }
-        }
+        },
+        Some("let*") => {
+            let mut temp_env = Env::new(Some(repl_env));
+            let keys = maltype.get(1)
+                .and_then(|x| x.list_or_vec())
+                .and_then(|v| if v.len() % 2 == 0 { Some(v) } else { None });
+            let value = maltype.get(2).clone();
+            if keys.is_some() && value.is_some() {
+                let (keys, value) = (keys.unwrap(), value.unwrap());
+                for x in keys.chunks(2) {
+                    if let MalType::Symbol(s) = &x[0].clone() {
+                        let v = EVAL(&x[1].clone(), &mut temp_env)?;
+                        temp_env.set(s, &v);
+                    } else {
+                        return Err(malerr!("List of first arg for 'let*' must be Symbols and args."));
+                    }
+                }
+                return EVAL(&value, &mut temp_env);
+            } else {
+                return Err(malerr!("Syntax error of 'let*'."));
+            }
+        },
+        _ => (),
     }
     eval_ast(maltype, repl_env)
 }
