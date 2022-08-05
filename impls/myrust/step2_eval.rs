@@ -33,19 +33,19 @@ fn READ(s: &str) -> Result<MalType> {
     reader::read_str(s)
 }
 
-fn EVAL(maltype: &MalType, repl_env: &HashMap<String, MalFunc>) -> Result<MalType> {
-    eval_ast(maltype, repl_env)
+fn EVAL(ast: &MalType, repl_env: &HashMap<String, MalFunc>) -> Result<MalType> {
+    eval_ast(ast, repl_env)
 }
 
-fn PRINT(maltype: &MalType) -> Result<String> {
-    Ok(printer::pr_str(maltype))
+fn PRINT(ast: &MalType) -> Result<String> {
+    Ok(printer::pr_str(ast))
 }
 
 /* step2_eval */
 
-fn eval_ast(maltype: &MalType, repl_env: &HashMap<String, MalFunc>) -> Result<MalType> {
-    match maltype {
-        MalType::List(v) if v.is_empty() => Ok(maltype.clone()),
+fn eval_ast(ast: &MalType, repl_env: &HashMap<String, MalFunc>) -> Result<MalType> {
+    match ast {
+        MalType::List(v) if v.is_empty() => Ok(ast.clone()),
         MalType::List(v) => {
             let maltypes = v.into_iter().map(|x| eval_ast(x, repl_env)).collect::<Result<Vec<_>>>()?;
             match maltypes.first().cloned() {
@@ -58,15 +58,18 @@ fn eval_ast(maltype: &MalType, repl_env: &HashMap<String, MalFunc>) -> Result<Ma
             }
         },
         MalType::Vec(v) => {
-            let maltypes: Result<Vec<_>> = v.into_iter().map(|x| eval_ast(x, repl_env)).collect();
-            Ok(MalType::Vec(maltypes?))
+            let v: Result<Vec<_>> = v.into_iter().map(|x|
+                EVAL(x, repl_env)).collect();
+            Ok(MalType::Vec(v?))
         },
-        MalType::HashMap(hm) => {
-            let mut hm_maltype: HashMap::<MalType, MalType> = HashMap::new();
-            for (k, v) in hm { hm_maltype.insert(k.clone(), eval_ast(v, repl_env)?); }
-            Ok(MalType::HashMap(hm_maltype))
+        MalType::HashMap(v) => {
+            let mut v1: Vec<(MalType, MalType)> = Vec::new();
+            for (x, y) in v {
+                v1.push((EVAL(x, repl_env)?, EVAL(y, repl_env)?));
+            }
+            Ok(MalType::HashMap(v1))
         },
-        _ => Ok(maltype.clone()),
+        _ => Ok(ast.clone()),
     }
 }
 

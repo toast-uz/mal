@@ -74,9 +74,8 @@ fn read_vector(reader: &mut Reader) -> Result<MalType> {
 }
 
 fn read_hash_map(reader: &mut Reader) -> Result<MalType> {
-    let res = read_sequence(reader, &MalType::HashMap(HashMap::new()),
-        &MalType::Lcurly, &MalType::Rcurly);
-    res
+    read_sequence(reader, &MalType::HashMap(Vec::new()),
+        &MalType::Lcurly, &MalType::Rcurly)
 }
 
 const NAME2SYMBOL: [(&str, &str); 6] = [

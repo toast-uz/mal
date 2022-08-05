@@ -11,6 +11,16 @@ pub struct Env<'a> {
 impl<'a> Env<'a> {
     pub fn new(outer: Option<&'a Env>) -> Self { Self { outer: outer, data: HashMap::new(), } }
 
+    pub fn init(&mut self, bind: &MalType, exprs: &MalType) {
+        let bind = bind.list().unwrap();
+        let exprs = exprs.list().unwrap();
+        for (b, e) in bind.iter().zip(exprs) {
+            if let Some(s) = b.symbol() {
+                self.set(&s, &e);
+            }
+        }
+    }
+
     // takes a symbol key and a mal value and adds to the data structure
     pub fn set(&mut self, key: &str, value: &MalType) {
         self.data.insert(key.to_string(), value.clone());

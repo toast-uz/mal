@@ -60,12 +60,33 @@ fn EVAL<'a>(ast: &MalType, repl_env: &mut Env<'a>) -> Result<MalType> {
                         let v = EVAL(&x[1].clone(), &mut temp_env)?;
                         temp_env.set(s, &v);
                     } else {
-                        return Err(malerr!("List of first arg for 'let*' must be Symbols and args."));
+                        return Err(malerr!("List of first arg for 'let*' or 'fn*' must be Symbols and args."));
                     }
                 }
                 return EVAL(&value, &mut temp_env);
             } else {
                 return Err(malerr!("Syntax error of 'let*'."));
+            }
+        },
+        Some("do") => {
+            let v = ast.list().unwrap();
+            let mut res = MalType::Nil;
+            for x in &v[1..] { res = EVAL(x, repl_env)?; }
+            return Ok(res);
+        },
+        Some("if") => {
+            let condition = ast.get(1);
+            let true_action = ast.get(2);
+            let false_action = ast.get(3).unwrap_or(MalType::Nil);
+            if condition.is_none() && true_action.is_some() {
+                let (condition, true_action) = (EVAL(&condition.unwrap(), repl_env)?, true_action.unwrap());
+                if !(condition == MalType::Nil || condition == MalType::False) {
+                    return EVAL(&true_action, repl_env);
+                } else {
+                    return EVAL(&false_action, repl_env);
+                }
+            } else {
+                return Err(malerr!("Syntax error of 'if'."));
             }
         },
         _ => (),
@@ -83,12 +104,12 @@ fn eval_ast(ast: &MalType, repl_env: &mut Env) -> Result<MalType> {
     match ast {
         MalType::List(v) if v.is_empty() => Ok(ast.clone()),
         MalType::List(v) => {
-            let v = v.into_iter().map(|x| EVAL(x, repl_env)).collect::<Result<Vec<_>>>()?;
-            match v.first().cloned() {
+            let maltypes = v.into_iter().map(|x| EVAL(x, repl_env)).collect::<Result<Vec<_>>>()?;
+            match maltypes.first().cloned() {
                 Some(MalType::Symbol(s)) => {
                     let symbol_content = repl_env.get(&*s)?;
                     match symbol_content {
-                        MalType::Fn(f) => (f.f)(&v[1..]), // length of args can be 0
+                        MalType::Fn(f) => (f.f)(&maltypes[1..]), // length of args can be 0
                         _ => Err(malerr!("Symbol {} is not a function.", s)),
                     }
                 }

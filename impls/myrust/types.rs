@@ -47,13 +47,12 @@ impl fmt::Display for Token {
 
 // ----------- MalType -----------
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum MalType {
     Comment, Nil, True, False, Int(i64), Float(f64),
     Lparen, Rparen, Lsqure, Rsqure, Lcurly, Rcurly,
     String(String), Keyword(String), Symbol(String),
-    List(Vec<MalType>), Vec(Vec<MalType>), HashMap(HashMap<MalType, MalType>),
+    List(Vec<MalType>), Vec(Vec<MalType>), HashMap(Vec<(MalType, MalType)>),
     Fn(MalFunc),
 }
 
@@ -63,38 +62,14 @@ impl MalType {
             MalType::List(_) => MalType::List(v.to_vec()),
             MalType::Vec(_) => MalType::Vec(v.to_vec()),
             MalType::HashMap(_) => {
-                let mut hm: HashMap<MalType, MalType> = HashMap::new();
-                for x in v[..].chunks(2) {
-                    hm.insert(x[0].clone(), x[1].clone());
+                let mut v1: Vec<(MalType, MalType)> = Vec::new();
+                for x in v.chunks(2) {
+                    v1.push((x[0].clone(), x[1].clone()));
                 }
-                MalType::HashMap(hm)
+                MalType::HashMap(v1)
             },
             _ => unreachable!(),
         }
-    }
-
-    pub fn type_name(&self) -> String {
-        match self {
-            Self::Comment => "MalType::Comment",
-            Self::Nil => "MalType::Nil",
-            Self::True => "MalType::True",
-            Self::False => "MalType::False",
-            Self::Lparen => "MalType::Lparen",
-            Self::Rparen => "MalType::Rparen",
-            Self::Lsqure => "MalType::Lsqure",
-            Self::Rsqure => "MalType::Rsqure",
-            Self::Lcurly => "MalType::Lcurly",
-            Self::Rcurly => "MalType::Rcurly",
-            Self::Int(_) => "MalType::Int",
-            Self::Float(_) => "MalType::Float",
-            Self::String(_) => "MalType::String",
-            Self::Keyword(_) => "MalType::Keyword",
-            Self::Symbol(_) => "MalType::Symbol",
-            Self::List(_) => "MalType::List",
-            Self::Vec(_) => "MalType::Vec",
-            Self::HashMap(_) => "MalType::HashMap",
-            Self::Fn(_) => "MalType::Fn",
-        }.to_string()
     }
 
     pub fn list(&self) -> Option<Vec<MalType>> {
@@ -116,10 +91,6 @@ impl MalType {
             MalType::Symbol(s) => Some(s.to_string()),
             _ => None,
         }
-    }
-
-    pub fn symbol_is(&self, name: &str) -> bool {
-        self.symbol().and_then(|x| Some(&x == name)).unwrap_or(false)
     }
 
     pub fn get(&self, i: usize) -> Option<MalType> {
@@ -181,8 +152,8 @@ impl MalType {
                 format!("({})", v.iter().map(|x| x.to_string()).join(" ")),
             Self::Vec(v) =>
                 format!("[{}]", v.iter().map(|x| x.to_string()).join(" ")),
-            Self::HashMap(hm) =>
-                format!("{{{}}}", hm.iter().map(|(k, v)| vec![k, v]).flatten().join(" ")),
+            Self::HashMap(v) =>
+                format!("{{{}}}", v.iter().map(|(k, v)| vec![k, v]).flatten().join(" ")),
             Self::Fn(f) => format!("#<{}>", f.name),
             _ => unreachable!(),
         }
@@ -207,12 +178,7 @@ impl Hash for MalType {
             Self::Symbol(s) => s.hash(state),
             Self::List(v) => v.hash(state),
             Self::Vec(v) => v.hash(state),
-            Self::HashMap(hm) => {
-                let v = hm.iter()
-                    .map(|(k, v)| vec![k, v])
-                    .flatten().collect_vec();
-                v.hash(state)
-            },
+            Self::HashMap(v) => v.hash(state),
             Self::Fn(f) => f.name.hash(state),
             x => std::mem::discriminant(x).hash(state),
         };
