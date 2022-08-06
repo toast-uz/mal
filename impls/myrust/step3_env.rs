@@ -12,6 +12,10 @@ use env::*;
 
  fn main() {
     let mut repl_env: Env = Env::new(None);
+    repl_env.set("+", &MalType::Fn(MalFunc::new("+", Rc::new(add))));
+    repl_env.set("-", &MalType::Fn(MalFunc::new("-", Rc::new(sub))));
+    repl_env.set("*", &MalType::Fn(MalFunc::new("*", Rc::new(mul))));
+    repl_env.set("/", &MalType::Fn(MalFunc::new("/", Rc::new(div))));
     loop {
         let mut s = String::new();
         print!("user> "); stdout().flush().unwrap();
@@ -21,11 +25,6 @@ use env::*;
 }
 
 fn rep<'a>(s: &str, repl_env: &mut Env) -> String {
-    repl_env.set("+", &MalType::Fn(MalFunc::new("+", Rc::new(add))));
-    repl_env.set("-", &MalType::Fn(MalFunc::new("-", Rc::new(sub))));
-    repl_env.set("*", &MalType::Fn(MalFunc::new("*", Rc::new(mul))));
-    repl_env.set("/", &MalType::Fn(MalFunc::new("/", Rc::new(div))));
-
     READ(s).and_then(|x| EVAL(&x, repl_env)).and_then(|x| PRINT(&x))
         .unwrap_or_else(|msg| { eprintln!("Err: {}", msg); "".to_string() })
 }
@@ -34,43 +33,45 @@ fn READ(s: &str) -> Result<MalType> {
     reader::read_str(s)
 }
 
-fn EVAL<'a>(ast: &MalType, repl_env: &mut Env<'a>) -> Result<MalType> {
+fn EVAL<'a>(ast: &MalType, repl_env: &mut Env) -> Result<MalType> {
     match ast.get(0).and_then(|x| x.symbol()).as_deref() {
         Some("def!") => {
             let key = ast.get(1).and_then(|x| x.symbol());
             let value = ast.get(2).clone();
-            if key.is_some() && value.is_some() {
-                let (key, value) = (key.unwrap(), EVAL(&value.unwrap(), repl_env)?);
-                repl_env.set(&key, &value);
-                return EVAL(&MalType::Symbol(key), repl_env);
-            } else {
+            if key.is_none() || value.is_none() {
                 return Err(malerr!("Syntax error of 'def!'."));
             }
+            let (key, value) = (key.unwrap(), EVAL(&value.unwrap(), repl_env)?);
+            if let MalType::Fn(f) = value.clone() {
+                repl_env.remove(&f.name);
+                repl_env.set(&key, &MalType::Fn(MalFunc::new(&key, f.f)));
+            } else {
+                repl_env.set(&key, &value);
+            }
+            EVAL(&MalType::Symbol(key), repl_env)
         },
         Some("let*") => {
             let mut temp_env = Env::new(Some(repl_env));
             let keys = ast.get(1)
                 .and_then(|x| x.list_or_vec())
-                .and_then(|v| if v.len() % 2 == 0 { Some(v) } else { None });
+                .filter(|v| v.len() % 2 == 0);
             let value = ast.get(2).clone();
-            if keys.is_some() && value.is_some() {
-                let (keys, value) = (keys.unwrap(), value.unwrap());
-                for x in keys.chunks(2) {
-                    if let MalType::Symbol(s) = &x[0].clone() {
-                        let v = EVAL(&x[1].clone(), &mut temp_env)?;
-                        temp_env.set(s, &v);
-                    } else {
-                        return Err(malerr!("List of first arg for 'let*' must be Symbols and args."));
-                    }
-                }
-                return EVAL(&value, &mut temp_env);
-            } else {
+            if keys.is_none() || value.is_none() {
                 return Err(malerr!("Syntax error of 'let*'."));
             }
+            let (keys, value) = (keys.unwrap(), value.unwrap());
+            for x in keys.chunks(2) {
+                if let MalType::Symbol(s) = &x[0].clone() {
+                    let v = EVAL(&x[1].clone(), &mut temp_env)?;
+                    temp_env.set(s, &v);
+                } else {
+                    return Err(malerr!("List of first arg for 'let*' or 'fn*' must be Symbols and args."));
+                }
+            }
+            EVAL(&value, &mut temp_env)
         },
-        _ => (),
+        _ => eval_ast(ast, repl_env),
     }
-    eval_ast(ast, repl_env)
 }
 
 fn PRINT(ast: &MalType) -> Result<String> {

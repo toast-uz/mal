@@ -53,7 +53,7 @@ pub enum MalType {
     Lparen, Rparen, Lsqure, Rsqure, Lcurly, Rcurly,
     String(String), Keyword(String), Symbol(String),
     List(Vec<MalType>), Vec(Vec<MalType>), HashMap(Vec<(MalType, MalType)>),
-    Fn(MalFunc),
+    Fn(MalFunc), Lambda(Vec<String>, Vec<MalType>),
 }
 
 impl MalType {
@@ -155,6 +155,8 @@ impl MalType {
             Self::HashMap(v) =>
                 format!("{{{}}}", v.iter().map(|(k, v)| vec![k, v]).flatten().join(" ")),
             Self::Fn(f) => format!("#<{}>", f.name),
+            Self::Lambda(args, v) =>
+                format!("#<lambda:({})->{{{}}}>", args.iter().join(" "), v.get(0).unwrap()),
             _ => unreachable!(),
         }
     }
@@ -180,6 +182,7 @@ impl Hash for MalType {
             Self::Vec(v) => v.hash(state),
             Self::HashMap(v) => v.hash(state),
             Self::Fn(f) => f.name.hash(state),
+            Self::Lambda(args, v) => (args, v).hash(state),
             x => std::mem::discriminant(x).hash(state),
         };
     }
@@ -187,15 +190,17 @@ impl Hash for MalType {
 
 // ----------- MalFunc -----------
 
+pub type Func<T> = Rc<dyn Fn(&[T]) -> Result<T>>;
+
 #[derive(Clone)]
 pub struct MalFunc{
     pub name: String,
-    pub f: Rc<dyn Fn(&[MalType]) -> Result<MalType>>,
+    pub f: Func<MalType>,
 }
 
 #[allow(dead_code)]
 impl MalFunc{
-    pub fn new(name: &str, f: Rc<dyn Fn(&[MalType]) -> Result<MalType>>) -> Self {
+    pub fn new(name: &str, f: Func<MalType>) -> Self {
         Self{ name: name.to_string(), f: f.clone() }
     }
 }
