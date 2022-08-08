@@ -1,11 +1,14 @@
+use std::fmt;
 use std::rc::Rc;
+use std::hash::{Hash, Hasher};
+use itertools::Itertools;
 use crate::types::*;
 use crate::malerr;
 
 #[derive(Debug, Clone)]
 pub struct Env {
-    outer: Option<Rc<Env>>,
-    data: Vec<(String, MalType)>,
+    pub outer: Option<Rc<Env>>,
+    pub data: Vec<(String, MalType)>,
 }
 
 impl Env {
@@ -26,15 +29,17 @@ impl Env {
     }
 
     // takes a symbol key and a mal value and adds to the data structure
-    pub fn set(&mut self, key: &str, value: &MalType) {
+    pub fn set(&mut self, key: &str, value: &MalType) -> MalType {
+        self.remove(key);
         self.data.push((key.to_string(), value.clone()));
+        MalType::Symbol(key.to_string())
     }
 
     pub fn remove(&mut self, key: &str) {
-        let i = self.data.len() - self.data.iter()
-            .position(|x| x.0 == key)
-            .expect("Cannot remove by undefined key.");
-        self.data.remove(i);
+        if let Some(i) = self.data.iter()
+                .position(|x| x.0 == key) {
+            self.data.remove(self.data.len() - i);
+        }
     }
 
     // takes a symbol key and if the current environment contains that key
@@ -60,5 +65,29 @@ impl Env {
             .find(|&x| x.0 == key)
             .map(|x| x.1.clone()))
             .ok_or_else(|| malerr!("'{}' not found.", key))
+    }
+}
+
+impl fmt::Display for Env{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let env_string = format!("[{}]", self.data.iter().map(|(k, _)| k).join(" "));
+        let out_string = if let Some(out) = self.outer.as_ref() {
+            format!("[{}]", out.data.iter().map(|(k, _)| k).join(" "))
+        } else {
+            "None".to_string()
+        };
+        write!(f, "{{{} depth:{} out:{}}}", env_string, self.depth(), out_string)
+    }
+}
+
+impl PartialEq for Env {
+    fn eq(&self, other: &Self) -> bool { self.data == other.data && self.outer == other.outer }
+}
+
+impl Eq for Env { }
+
+impl Hash for Env {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.data.hash(state)
     }
 }

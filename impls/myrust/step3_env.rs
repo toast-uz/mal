@@ -61,12 +61,7 @@ fn EVAL<'a>(ast: &MalType, repl_env: &mut Env) -> Result<MalType> {
                 return Err(malerr!("Syntax error of 'def!'."));
             }
             let (key, value) = (key.unwrap(), EVAL(&value.unwrap(), repl_env)?);
-            if let MalType::Fn(f) = value.clone() {
-                repl_env.remove(&f.name);
-                repl_env.set(&key, &MalType::Fn(MalFunc::new(&key, f.f)));
-            } else {
-                repl_env.set(&key, &value);
-            }
+            repl_env.set(&key, &value);
             EVAL(&MalType::Symbol(key), repl_env)
         },
         Some("let*") => {

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::ops::{Add, Sub, Mul, Div};
 use itertools::Itertools;
 use regex::Regex;
+use crate::env::*;
 
 const PREFIX_KEYWORD: &str = "\u{029e}";
 
@@ -135,7 +136,7 @@ pub enum MalType {
     Lparen, Rparen, Lsqure, Rsqure, Lcurly, Rcurly,
     String(String), Keyword(String), Symbol(String),
     List(Vec<MalType>), Vec(Vec<MalType>), HashMap(Vec<(MalType, MalType)>),
-    Fn(MalFunc), Lambda(Vec<String>, Vec<MalType>),
+    Fn(MalFunc), Lambda(Vec<String>, Vec<MalType>, Env),
 }
 
 impl MalType {
@@ -241,8 +242,8 @@ impl MalType {
             Self::HashMap(v) =>
                 format!("{{{}}}", v.iter().map(|(k, v)| vec![k, v]).flatten().join(" ")),
             Self::Fn(f) => format!("#<{}>", f.name),
-            Self::Lambda(args, v) =>
-                format!("#<lambda:({})->{{{}}}>", args.iter().join(" "), v.get(0).unwrap()),
+            Self::Lambda(args, v, env) =>
+                format!("#<lambda:({})->{{{}}}; env_depth:{}>", args.iter().join(" "), v.get(0).unwrap(), env.depth()),
             _ => unreachable!(),
         }
     }
