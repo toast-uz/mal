@@ -10,12 +10,31 @@ use std::ops::{Add, Sub, Mul, Div};
 use types::*;
 use env::*;
 
+macro_rules! define_arithmetic_operations {
+    ( $f:ident ) => (
+        Rc::new(move |x: &[MalType]| {
+            let a = x.get(0).and_then(|x| x.num());
+            let b = x.get(1).and_then(|x| x.num());
+            if a.is_none() || b.is_none() {
+                Err(malerr!("Illegal args for the arithmetic operation."))
+            } else {
+                let (a, b) = (a.unwrap(), b.unwrap());
+                Ok(MalType::from(a.$f(b)))
+            }
+        })
+    )
+}
+
  fn main() {
     let mut repl_env: Env = Env::new(None);
-    repl_env.set("+", &MalType::Fn(MalFunc::new("+", Rc::new(add))));
-    repl_env.set("-", &MalType::Fn(MalFunc::new("-", Rc::new(sub))));
-    repl_env.set("*", &MalType::Fn(MalFunc::new("*", Rc::new(mul))));
-    repl_env.set("/", &MalType::Fn(MalFunc::new("/", Rc::new(div))));
+    let add = define_arithmetic_operations!(add);
+    let sub = define_arithmetic_operations!(sub);
+    let mul = define_arithmetic_operations!(mul);
+    let div = define_arithmetic_operations!(div);
+    repl_env.set("+", &MalType::Fn(MalFunc::new("+", add)));
+    repl_env.set("-", &MalType::Fn(MalFunc::new("-", sub)));
+    repl_env.set("*", &MalType::Fn(MalFunc::new("*", mul)));
+    repl_env.set("/", &MalType::Fn(MalFunc::new("/", div)));
     loop {
         let mut s = String::new();
         print!("user> "); stdout().flush().unwrap();
@@ -118,27 +137,3 @@ fn eval_ast(ast: &MalType, repl_env: &mut Env) -> Result<MalType> {
         _ => Ok(ast.clone()),
     }
 }
-
-macro_rules! malfunc_binomial_number {
-    ( $s:expr, $f:ident ) => (
-        fn $f(v: &[MalType]) -> Result<MalType> {
-            if v.len() != 2 { return Err(malerr!(
-                "Illegal number of args: {} for the binomial operator \"{}\".", v.len(), $s)
-            ); }
-            let (x, y) = (v[0].clone(), v[1].clone());
-            match (x, y) {
-                (MalType::Int(x), MalType::Int(y)) => Ok(MalType::Int(x.$f(&y))),
-                (MalType::Int(x), MalType::Float(y)) => Ok(MalType::Float((x as f64).$f(&y))),
-                (MalType::Float(x), MalType::Int(y)) => Ok(MalType::Float(x.$f(&(y as f64)))),
-                (MalType::Float(x), MalType::Float(y)) => Ok(MalType::Float(x.$f(&y))),
-                (x, y) => Err(malerr!("Cannot calc \"{}\" between {} and {}", $s, x, y)),
-            }
-        }
-    )
-}
-
-malfunc_binomial_number!("+", add);
-malfunc_binomial_number!("-", sub);
-malfunc_binomial_number!("*", mul);
-malfunc_binomial_number!("/", div);
-

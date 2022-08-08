@@ -3,6 +3,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::hash::{Hash, Hasher};
 use std::collections::HashMap;
+use std::ops::{Add, Sub, Mul, Div};
 use itertools::Itertools;
 use regex::Regex;
 
@@ -45,11 +46,92 @@ impl fmt::Display for Token {
     }
 }
 
+// ----------- Number ------------
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Number {
+    Int(i64), Float(f64),
+}
+
+impl fmt::Display for Number {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = match self {
+            Self::Int(num) => format!("{}", num),
+            Self::Float(num) => format!("{}", num),
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl Eq for Number { }
+
+impl PartialOrd for Number {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (*self, *other) {
+            (Number::Int(x), Number::Int(y)) => x.partial_cmp(&y),
+            (Number::Int(x), Number::Float(y)) => (x as f64).partial_cmp(&y),
+            (Number::Float(x), Number::Int(y)) => x.partial_cmp(&(y as f64)),
+            (Number::Float(x), Number::Float(y)) => x.partial_cmp(&y),
+        }
+    }
+}
+
+impl Ord for Number {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()    // ignore nan
+    }
+}
+
+impl Hash for Number {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Int(num) => num.hash(state),
+            Self::Float(num) => (*num as i64).hash(state),
+        }
+    }
+}
+
+impl From<i64> for Number { fn from(x: i64) -> Self { Self::Int(x) } }
+impl From<f64> for Number { fn from(x: f64) -> Self { Self::Float(x) } }
+impl From<usize> for Number { fn from(x: usize) -> Self { Self::from(x as i64) } }
+
+impl std::str::FromStr for Number {
+    type Err = MalError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        if let Ok(x) = s.parse::<i64>() {
+            return Ok(Number::Int(x))
+        }
+        if let Ok(x) = s.parse::<f64>() {
+            return Ok(Number::Float(x))
+        }
+        Err(malerr!("Cannot parse to Number from string."))
+    }
+}
+
+macro_rules! define_arithmetic_operations {
+    ( $t:ident, $f:ident ) => ( impl $t for Number { type Output = Self;
+        fn $f(self, other: Self) -> Self::Output {
+            match (self, other) {
+                (Number::Int(x), Number::Int(y)) => Number::Int(x.$f(&y)),
+                (Number::Int(x), Number::Float(y)) => Number::Float((x as f64).$f(&y)),
+                (Number::Float(x), Number::Int(y)) => Number::Float(x.$f(&(y as f64))),
+                (Number::Float(x), Number::Float(y)) => Number::Float(x.$f(&y)),
+            }
+        }
+    })
+}
+
+define_arithmetic_operations!(Add, add);
+define_arithmetic_operations!(Sub, sub);
+define_arithmetic_operations!(Mul, mul);
+define_arithmetic_operations!(Div, div);
+
 // ----------- MalType -----------
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MalType {
-    Comment, Nil, True, False, Int(i64), Float(f64),
+    Comment, Nil, True, False, Num(Number),
     Lparen, Rparen, Lsqure, Rsqure, Lcurly, Rcurly,
     String(String), Keyword(String), Symbol(String),
     List(Vec<MalType>), Vec(Vec<MalType>), HashMap(Vec<(MalType, MalType)>),
@@ -93,6 +175,13 @@ impl MalType {
         }
     }
 
+    pub fn num(&self) -> Option<Number> {
+        match *self {
+            MalType::Num(num) => Some(num),
+            _ => None,
+        }
+    }
+
     pub fn get(&self, i: usize) -> Option<MalType> {
         self.list().and_then(|v| v.get(i).cloned())
     }
@@ -103,10 +192,8 @@ impl MalType {
         let string_re = Regex::new(r"\x22(?:[\\].|[^\\\x22])*\x22").unwrap();
         if let Some(';') = s.chars().next() {
             Ok(Self::Comment)
-        } else if let Ok(num) = s.parse::<i64>() {
-            Ok(Self::Int(num))
-        } else if let Ok(num) = s.parse::<f64>() {
-            Ok(Self::Float(num))
+        } else if let Ok(num) = s.parse::<Number>() {
+            Ok(Self::Num(num))
         } else if string_re.is_match(&s) {
             Ok(Self::String(Self::_unescape(&s[1..(s.len() - 1)])))
         } else if let Some('\"') = s.chars().next() {
@@ -143,8 +230,7 @@ impl MalType {
         match self {
             Self::Comment => "".to_string(),
             x if maltype2name.contains_key(&x) => maltype2name[&*x].to_string(),
-            Self::Int(num) => format!("{}", num),
-            Self::Float(num) => format!("{}", num),
+            Self::Num(num) => format!("{}", num),
             Self::String(s) => format!("\"{}\"", s),
             Self::Keyword(s) => format!(":{}", s),
             Self::Symbol(s) => s.to_string(),
@@ -168,25 +254,23 @@ impl fmt::Display for MalType {
     }
 }
 
-impl Eq for MalType { }
-
-impl Hash for MalType {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            Self::Int(num) => num.hash(state),
-            Self::Float(num) => (*num as i64).hash(state),
-            Self::String(s) => s.hash(state),
-            Self::Keyword(s) => s.hash(state),
-            Self::Symbol(s) => s.hash(state),
-            Self::List(v) => v.hash(state),
-            Self::Vec(v) => v.hash(state),
-            Self::HashMap(v) => v.hash(state),
-            Self::Fn(f) => f.name.hash(state),
-            Self::Lambda(args, v) => (args, v).hash(state),
-            x => std::mem::discriminant(x).hash(state),
-        };
-    }
-}
+impl From<bool> for MalType { fn from(x: bool) -> Self {
+    if x { Self::True } else { Self::False }
+} }
+impl From<Option<bool>> for MalType { fn from(x: Option<bool>) -> Self {
+    if let Some(x) = x { Self::from(x) } else { Self::False }
+} }
+impl From<Option<usize>> for MalType { fn from(x: Option<usize>) -> Self {
+    if let Some(x) = x { Self::from(x) } else { Self::from(0usize) }
+} }
+impl From<Number> for MalType { fn from(x: Number) -> Self { Self::Num(x) } }
+impl From<i64> for MalType { fn from(x: i64) -> Self { Self::from(Number::from(x)) } }
+impl From<f64> for MalType { fn from(x: f64) -> Self { Self::from(Number::from(x)) } }
+impl From<usize> for MalType { fn from(x: usize) -> Self { Self::from(Number::from(x)) } }
+impl From<&[Self]> for MalType { fn from(x: &[Self]) -> Self { Self::Vec(x.to_vec()) } }
+impl From<&[(Self, Self)]> for MalType { fn from(x: &[(Self, Self)]) -> Self {
+    Self::HashMap(x.to_vec())
+} }
 
 // ----------- MalFunc -----------
 
@@ -205,6 +289,12 @@ impl MalFunc{
     }
 }
 
+impl fmt::Display for MalFunc{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 impl fmt::Debug for MalFunc{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
@@ -216,6 +306,12 @@ impl PartialEq for MalFunc {
 }
 
 impl Eq for MalFunc { }
+
+impl Hash for MalFunc {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state)
+    }
+}
 
 // ----------- MalError -----------
 
