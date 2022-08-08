@@ -38,7 +38,7 @@ fn READ(s: &str) -> Result<MalType> {
 
 // Evaluation step 1: handle special forms
 fn EVAL(ast: &MalType, repl_env: &mut Env) -> Result<MalType> {
-//    dbg!("EVAL: {:?}", ast);
+    dbg!("\n\x1b[31mEVAL\x1b[m ast:{} env:{}", ast, repl_env.depth());
     match ast.get(0).and_then(|x| x.symbol()).as_deref() {
         Some("def!") => {
             let key = ast.get(1).and_then(|x| x.symbol());
@@ -53,10 +53,11 @@ fn EVAL(ast: &MalType, repl_env: &mut Env) -> Result<MalType> {
             } else {
                 repl_env.set(&key, &value);
             }
+            dbg!("EVAL def! {}->{}", key, value);
             EVAL(&MalType::Symbol(key), repl_env)
         },
         Some("let*") => {
-            let mut temp_env = Env::new(Some(repl_env));
+            dbg!("EVAL let*");
             let keys = ast.get(1)
                 .and_then(|x| x.list_or_vec())
                 .filter(|v| v.len() % 2 == 0);
@@ -65,15 +66,16 @@ fn EVAL(ast: &MalType, repl_env: &mut Env) -> Result<MalType> {
                 return Err(malerr!("Syntax error of 'let*'."));
             }
             let (keys, value) = (keys.unwrap(), value.unwrap());
+            let mut new_env = Env::new(Some(repl_env));
             for x in keys.chunks(2) {
                 if let MalType::Symbol(s) = &x[0].clone() {
-                    let v = EVAL(&x[1].clone(), &mut temp_env)?;
-                    temp_env.set(s, &v);
+                    let v = EVAL(&x[1].clone(), &mut new_env)?;
+                    new_env.set(s, &v);
                 } else {
                     return Err(malerr!("List of first arg for 'let*' or 'fn*' must be Symbols and args."));
                 }
             }
-            EVAL(&value, &mut temp_env)
+            EVAL(&value, &mut new_env)
         },
         Some("do") => {
             let v = ast.list().unwrap();
@@ -96,6 +98,7 @@ fn EVAL(ast: &MalType, repl_env: &mut Env) -> Result<MalType> {
             }
         },
         Some("fn*") => {
+            dbg!("EVAL fn*1: {}", ast.clone());
             let bind = ast.get(1)
                 .and_then(|x| x.list())
                 .filter(|x| x.iter()
@@ -106,12 +109,11 @@ fn EVAL(ast: &MalType, repl_env: &mut Env) -> Result<MalType> {
             }
             let bind = bind.unwrap().iter()
                 .map(|x| x.symbol().unwrap()).collect_vec();
-            let ast = vec![ast.unwrap()];
-//            dbg!("EVAL fn* -> {}", MalType::Lambda(bind.clone(), ast.clone()));
-            Ok(MalType::Lambda(bind, ast))
-         },
+            dbg!("EVAL fn*2: {}", MalType::Lambda(bind.clone(), vec![ast.clone().unwrap()]));
+            EVAL(&MalType::Lambda(bind, vec![ast.unwrap()]), repl_env)
+        },
         _ => {
-//            dbg!("EVAL default");
+            dbg!("EVAL default");
             eval_ast(ast, repl_env)
         },
     }
@@ -122,42 +124,49 @@ fn PRINT(ast: &MalType) -> Result<String> {
 }
 
 fn eval_ast(ast: &MalType, repl_env: &mut Env) -> Result<MalType> {
+    dbg!("\x1b[31m eval_ast\x1b[m ast:{}, env:{}", ast, repl_env.depth());
     match ast {
         MalType::List(v) if v.is_empty() => Ok(ast.clone()),
         MalType::List(v) => {
-//            dbg!("eval_ast handle List {:?}", v);
             match v[0].clone() {
                 MalType::Symbol(s) => {
-                    dbg!("eval_ast List->Symbol {}", s);
+                    dbg!(" eval_ast List->Symbol {}", s);
                     let symbol_content = repl_env.get(&*s)?;
                     match symbol_content {
                         MalType::Fn(_) | MalType::Lambda(_, _) => {
                             let mut v1 = vec![symbol_content];
                             v1.append(&mut v.iter().skip(1).cloned().collect_vec());
-                            dbg!("call EVAL {:?}", v1);
+                            dbg!(" call EVAL {:?}", v1);
                             EVAL(&MalType::List(v1), repl_env)
                         },
                         _ => Err(malerr!("Symbol {} is not a function.", s)),
                     }
                 },
                 MalType::Fn(f) => {
-                    dbg!("eval_ast List->Fn {}", f);
+                    dbg!(" eval_ast List->Fn {}", f);
                     let v1 = v.iter().skip(1).map(|x| EVAL(x, repl_env)).collect::<Result<Vec<MalType>>>()?;
                     (f.f)(&v1).and_then(|v2| EVAL(&v2, repl_env))
                 },
                 MalType::Lambda(bind, ast) => {
+                    // Make exprs by args.
                     let exprs = v[1..].to_vec();
                     if bind.len() != exprs.len() {
                         return Err(malerr!("Illegal number of bind:{} != exprs:{}.", bind.len(), exprs.len()));
                     }
-                    dbg!("eval_ast List->Lambda bind:{:?} exprs:{:?} ast:{:?}", bind, exprs, ast);
-                    let eval_exprs = exprs.iter().map(|e| EVAL(&e, repl_env)).collect::<Result<Vec<MalType>>>()?;
-                    let mut temp_env = Env::new(Some(repl_env));
-                    bind.iter().zip(eval_exprs).for_each(|(b, e)| temp_env.set(b, &e));
-                    EVAL(&ast[0], &mut temp_env)
+                    dbg!("\x1b[32m eval_ast List->Lambda#1\x1b[m bind:{:?} = exprs:{:?} ast[0]:{}", bind, exprs, ast[0]);
+                    // Each bind links with each evaluated expr.
+                    let exprs = exprs.iter().map(|e| EVAL(&e, repl_env)).collect::<Result<Vec<MalType>>>()?;
+                    // Binds make new environment.
+                    let mut new_env = Env::new(Some(repl_env));
+                    bind.iter().zip(exprs).for_each(|(b, e)| new_env.set(b, &e));
+                    dbg!("\x1b[32m eval_ast List->Lambda#2\x1b[m bind:{:?} ast[0]:{} env:{}", bind, ast[0], new_env.depth());
+                    // Evaluate ast[0] under new environment.
+                    let tmp = EVAL(&ast[0], &mut new_env);
+                    dbg!("\x1b[32m eval_ast List->Lambda#3\x1b[m res:{:?} env:{}", tmp, new_env.depth());
+                    tmp
                 },
                 MalType::List(v2) => {
-                    dbg!("eval_ast List->List {:?}", v2);
+                    dbg!(" eval_ast List->List {:?}", v2);
                     let mut v1 = vec![EVAL(&MalType::List(v2), repl_env)?];
                     v1.append(&mut v.iter().skip(1).cloned().collect_vec());
                     EVAL(&MalType::List(v1), repl_env)
@@ -178,12 +187,12 @@ fn eval_ast(ast: &MalType, repl_env: &mut Env) -> Result<MalType> {
             Ok(MalType::HashMap(v1))
         },
         MalType::Symbol(s) => {
-            dbg!("eval_ast handle Symbol {}", s);
+            dbg!(" eval_ast handle Symbol {}", s);
             let symbol_content = repl_env.get(&*s)?;
             EVAL(&symbol_content, repl_env)
         },
         _ => {  // other
-            dbg!("eval_ast handle default");
+            dbg!(" eval_ast handle default {}", ast);
             Ok(ast.clone())
         },
     }

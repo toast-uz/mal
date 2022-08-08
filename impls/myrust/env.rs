@@ -14,6 +14,17 @@ impl Env {
         data: Vec::new(),
     } }
 
+    #[allow(dead_code)]
+    pub fn depth(&self) -> usize {
+        let mut res = 0;
+        let mut current = self.outer.clone();
+        while current.is_some() {
+            current = current.unwrap().outer.clone();
+            res += 1;
+        }
+        res
+    }
+
     // takes a symbol key and a mal value and adds to the data structure
     pub fn set(&mut self, key: &str, value: &MalType) {
         self.data.push((key.to_string(), value.clone()));
