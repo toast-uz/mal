@@ -29,10 +29,9 @@ impl Reader {
 
 // take a single string and return an array/list of all the tokens (strings) in it.
 fn tokenize(s: &str) -> Vec<Token> {
-    let re = Regex::new(r"[\s,]*(~@|[\[\]{}()'`~^@]|\x22(?:[\\].|[^\\\x22])*\x22?|;.*|[^\s\[\]{}()'\x22`@,;]+)").unwrap();
-    re.captures_iter(s)
-        .map(|cap| Token::new(&cap[1]))
-        .collect_vec()
+    let re = Regex::new(r#"[\s,]*(~@|[\[\]{}()'`~^@]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#).unwrap();
+    re.captures_iter(s.trim())
+        .map(|cap| Token::new(&cap[1])).collect_vec()
 }
 
 // look at the contents of the token
@@ -41,7 +40,7 @@ fn read_atm(reader: &mut Reader) -> Result<MalType> {
     MalType::from_token(&reader.next().unwrap())
 }
 
-fn read_sequence(reader: &mut Reader, typ: &MalType, start: &MalType, end: &MalType)
+fn read_sequence(reader: &mut Reader, typ: &str, start: &MalType, end: &MalType)
         -> Result<MalType> {
     let token = reader.next();
     if token.is_none() || MalType::from_token(&token.unwrap())? != *start {
@@ -64,18 +63,15 @@ fn read_sequence(reader: &mut Reader, typ: &MalType, start: &MalType, end: &MalT
 // (if it reach EOF before reading a ')' then that is an error).
 // It accumulates the results into a List type.
 fn read_list(reader: &mut Reader) -> Result<MalType> {
-    read_sequence(reader, &MalType::List(Vec::new()),
-        &MalType::Lparen, &MalType::Rparen)
+    read_sequence(reader, "list", &MalType::Lparen, &MalType::Rparen)
 }
 
 fn read_vector(reader: &mut Reader) -> Result<MalType> {
-    read_sequence(reader, &MalType::Vec(Vec::new()),
-        &MalType::Lsqure, &MalType::Rsqure)
+    read_sequence(reader, "vec", &MalType::Lsqure, &MalType::Rsqure)
 }
 
 fn read_hash_map(reader: &mut Reader) -> Result<MalType> {
-    read_sequence(reader, &MalType::HashMap(Vec::new()),
-        &MalType::Lcurly, &MalType::Rcurly)
+    read_sequence(reader, "hashmap", &MalType::Lcurly, &MalType::Rcurly)
 }
 
 const NAME2SYMBOL: [(&str, &str); 6] = [
@@ -97,11 +93,13 @@ pub fn read_form(reader: &mut Reader) -> Result<MalType> {
             reader.next();
             if name2symbol[&*x] == "with-meta" {
                 let meta = read_form(reader)?;
-                Ok(MalType::List(vec![MalType::Symbol(name2symbol[&*x].to_string()),
-                    read_form(reader)?, meta]))
+                Ok(MalType::ListVec(MalListVec{0: true,
+                    1: vec![MalType::Symbol(name2symbol[&*x].to_string()),
+                    read_form(reader)?, meta]}))
             } else {
-                Ok(MalType::List(vec![MalType::Symbol(name2symbol[&*x].to_string()),
-                    read_form(reader)?]))
+                Ok(MalType::ListVec(MalListVec{0: true,
+                    1: vec![MalType::Symbol(name2symbol[&*x].to_string()),
+                    read_form(reader)?]}))
             }
         },
         MalType::Comment => { reader.next(); Ok(MalType::Comment) },
@@ -119,6 +117,7 @@ pub fn read_form(reader: &mut Reader) -> Result<MalType> {
 // Then it will call read_form with the Reader instance.
 pub fn read_str(s: &str) -> Result<MalType> {
     let tokens = tokenize(s);
+//    eprintln!("{} {:?}", s, tokens);
     // if tokens.is_empty() { return Err("Blank Line") }
     read_form(&mut Reader::new(&tokens))
 }

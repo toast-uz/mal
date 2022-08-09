@@ -134,17 +134,17 @@ define_arithmetic_operations!(Div, div);
 pub enum MalType {
     Comment, Nil, True, False, Num(Number),
     Lparen, Rparen, Lsqure, Rsqure, Lcurly, Rcurly,
-    String(String), Keyword(String), Symbol(String),
-    List(Vec<MalType>), Vec(Vec<MalType>), HashMap(Vec<(MalType, MalType)>),
+    String(String), Keyword(String), Symbol(String), Print(String),
+    ListVec(MalListVec), HashMap(Vec<(MalType, MalType)>),
     Fn(MalFunc), Lambda(Vec<String>, Vec<MalType>, Env),
 }
 
 impl MalType {
-    pub fn new_vec(typ: &MalType, v: &[MalType]) -> Self {
+    pub fn new_vec(typ: &str, v: &[MalType]) -> Self {
         match typ {
-            MalType::List(_) => MalType::List(v.to_vec()),
-            MalType::Vec(_) => MalType::Vec(v.to_vec()),
-            MalType::HashMap(_) => {
+            "list" => MalType::ListVec(MalListVec{0: true, 1: v.to_vec()}),
+            "vec" => MalType::ListVec(MalListVec{0: false, 1: v.to_vec()}),
+            "hashmap" => {
                 let mut v1: Vec<(MalType, MalType)> = Vec::new();
                 for x in v.chunks(2) {
                     v1.push((x[0].clone(), x[1].clone()));
@@ -157,14 +157,14 @@ impl MalType {
 
     pub fn list(&self) -> Option<Vec<MalType>> {
         match self {
-            MalType::List(v) => Some(v.clone()),
+            MalType::ListVec(mlv) if mlv.0 => Some(mlv.1.clone()),
             _ => None,
         }
     }
 
     pub fn list_or_vec(&self) -> Option<Vec<MalType>> {
         match self {
-            MalType::List(v) | MalType::Vec(v) => Some(v.clone()),
+            MalType::ListVec(mlv) => Some(mlv.1.clone()),
             _ => None,
         }
     }
@@ -172,6 +172,13 @@ impl MalType {
     pub fn symbol(&self) -> Option<String> {
         match self {
             MalType::Symbol(s) => Some(s.to_string()),
+            _ => None,
+        }
+    }
+
+    pub fn string(&self) -> Option<String> {
+        match self {
+            MalType::String(s) => Some(s.to_string()),
             _ => None,
         }
     }
@@ -184,13 +191,13 @@ impl MalType {
     }
 
     pub fn get(&self, i: usize) -> Option<MalType> {
-        self.list().and_then(|v| v.get(i).cloned())
+        self.list_or_vec().and_then(|v| v.get(i).cloned())
     }
 
     pub fn from_token(token: &Token) -> Result<Self> {
         let s = token.to_string();
         let name2maltype: HashMap<&str, &MalType> = NAME2MALTYPE.iter().cloned().collect();
-        let string_re = Regex::new(r"\x22(?:[\\].|[^\\\x22])*\x22").unwrap();
+        let string_re = Regex::new(r#""(?:\\.|[^\\"])*"?"#).unwrap();
         if let Some(';') = s.chars().next() {
             Ok(Self::Comment)
         } else if let Ok(num) = s.parse::<Number>() {
@@ -208,21 +215,11 @@ impl MalType {
     }
 
     fn _unescape(s: &str) -> String {
-        let re1 = Regex::new(r"\\x22").unwrap();  // replace to temp
-        let re2 = Regex::new(r"\n").unwrap();
-        let re3 = Regex::new(r"\\").unwrap();
-        let re4 = Regex::new(PREFIX_KEYWORD).unwrap(); // replace from temp
-
-        // a backslash followed by a doublequote is
-        // translated into a plain doublequote character,
-        let res1 = re1.replace(s, PREFIX_KEYWORD);
-        // a backslash followed by "n" is translated into a newline,
-        let res2 = re2.replace(&res1, "\n");
-        // a backslash followed by another backslash is
-        // translated into a single backslash.
-        let res3 = re3.replace(&res2, r"\");
-        let res4 = re4.replace(&res3, "\"");
-        res4.to_string()
+        s.replace(r"\\", PREFIX_KEYWORD)
+            .replace(r"\n", "\n")
+            .replace(r#"\""#, "\"")
+            .replace(PREFIX_KEYWORD, r"\")
+            .to_string()
     }
 
     pub fn to_string(&self) -> String {
@@ -232,13 +229,11 @@ impl MalType {
             Self::Comment => "".to_string(),
             x if maltype2name.contains_key(&x) => maltype2name[&*x].to_string(),
             Self::Num(num) => format!("{}", num),
-            Self::String(s) => format!("\"{}\"", s),
+            Self::String(s) => s.to_string(),
             Self::Keyword(s) => format!(":{}", s),
             Self::Symbol(s) => s.to_string(),
-            Self::List(v) =>
-                format!("({})", v.iter().map(|x| x.to_string()).join(" ")),
-            Self::Vec(v) =>
-                format!("[{}]", v.iter().map(|x| x.to_string()).join(" ")),
+            Self::Print(s) => s.to_string(),
+            Self::ListVec(v) => format!("{}", v),
             Self::HashMap(v) =>
                 format!("{{{}}}", v.iter().map(|(k, v)| vec![k, v]).flatten().join(" ")),
             Self::Fn(f) => format!("#<{}>", f.name),
@@ -268,10 +263,25 @@ impl From<Number> for MalType { fn from(x: Number) -> Self { Self::Num(x) } }
 impl From<i64> for MalType { fn from(x: i64) -> Self { Self::from(Number::from(x)) } }
 impl From<f64> for MalType { fn from(x: f64) -> Self { Self::from(Number::from(x)) } }
 impl From<usize> for MalType { fn from(x: usize) -> Self { Self::from(Number::from(x)) } }
-impl From<&[Self]> for MalType { fn from(x: &[Self]) -> Self { Self::Vec(x.to_vec()) } }
-impl From<&[(Self, Self)]> for MalType { fn from(x: &[(Self, Self)]) -> Self {
-    Self::HashMap(x.to_vec())
-} }
+
+// ----------- MalListVec -----------
+
+#[derive(Debug, Clone, Eq, Hash)]
+pub struct MalListVec(pub bool, pub Vec<MalType>);  // true = List, false = Vec
+
+impl PartialEq for MalListVec {
+    fn eq(&self, other: &Self) -> bool { self.1 == other.1 }
+}
+
+impl fmt::Display for MalListVec {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.0 {
+            write!(f, "({})", self.1.iter().join(" "))
+        } else {
+            write!(f, "[{}]", self.1.iter().join(" "))
+        }
+    }
+}
 
 // ----------- MalFunc -----------
 

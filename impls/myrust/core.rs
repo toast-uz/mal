@@ -1,6 +1,8 @@
 use std::ops::{Add, Sub, Mul, Div};
 use std::rc::Rc;
+use itertools::Itertools;
 use crate::types::*;
+use crate::printer;
 use crate::malerr;
 
 macro_rules! define_arithmetic_operations {
@@ -40,24 +42,18 @@ pub fn ns() -> Vec<MalFunc> {
     res.push(MalFunc::new("*", mul));
     let div = define_arithmetic_operations!(div);
     res.push(MalFunc::new("/", div));
-    res.push(MalFunc::new("prn", Rc::new(move |x: &[MalType]| {
-        if let Some(x) = x.get(0) {
-            println!("{}", crate::printer::pr_str(x));
-        }
-        Ok(MalType::Nil)
-    })));
     res.push(MalFunc::new("list", Rc::new(move |x: &[MalType]| {
-        Ok(MalType::List(x.to_vec()))
+        Ok(MalType::ListVec(MalListVec{0: true, 1: x.to_vec()}))
     })));
     res.push(MalFunc::new("list?", Rc::new(move |x: &[MalType]| {
         Ok(MalType::from(x.get(0).and_then(|x| x.list()).is_some()))
     })));
     res.push(MalFunc::new("empty?", Rc::new(move |x: &[MalType]| {
-        Ok(MalType::from(x.get(0).and_then(|x| x.list())
+        Ok(MalType::from(x.get(0).and_then(|x| x.list_or_vec())
             .and_then(|x| Some(x.is_empty()))))
     })));
     res.push(MalFunc::new("count", Rc::new(move |x: &[MalType]| {
-        Ok(MalType::from(x.get(0).and_then(|x| x.list())
+        Ok(MalType::from(x.get(0).and_then(|x| x.list_or_vec())
             .and_then(|x| Some(x.len()))))
     })));
 
@@ -79,5 +75,21 @@ pub fn ns() -> Vec<MalFunc> {
     res.push(MalFunc::new(">",gt));
     let ge = define_cmp_operations!(ge);
     res.push(MalFunc::new(">=", ge));
+    res.push(MalFunc::new("pr-str", Rc::new(move |x: &[MalType]| {
+        Ok(MalType::String(x.iter().map(|x| printer::pr_str(x, true)).join(" ")))
+    })));
+    res.push(MalFunc::new("str", Rc::new(move |x: &[MalType]| {
+        Ok(MalType::String(x.iter().map(|x| printer::pr_str(x, false)).join("")))
+    })));
+    res.push(MalFunc::new("prn", Rc::new(move |x: &[MalType]| {
+        let s = MalType::Print(x.iter().map(|x| printer::pr_str(x, true)).join(" "));
+        println!("{}", s);
+        Ok(MalType::Nil)
+    })));
+    res.push(MalFunc::new("println", Rc::new(move |x: &[MalType]| {
+        let s = MalType::Print(x.iter().map(|x| printer::pr_str(x, false)).join(" "));
+        println!("{}", s);
+        Ok(MalType::Nil)
+    })));
     res
 }

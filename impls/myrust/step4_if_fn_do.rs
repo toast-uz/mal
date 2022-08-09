@@ -5,9 +5,10 @@ mod types;
 mod env;
 mod core;
 
-use std::io::{stdin, stdout, Write};
 use std::rc::Rc;
 use itertools::Itertools;
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
 use types::*;
 use env::*;
 
@@ -15,23 +16,41 @@ const DEBUG: bool = false;
 macro_rules! dbg {( $( $x:expr ),* ) => ( if DEBUG {eprintln!($( $x ),* )})}
 
  fn main() {
+    let mut rl = Editor::<()>::new().unwrap();
+    if rl.load_history(".mal-history").is_err() {
+        eprintln!("No previous history.");
+    }
+
     let mut env: Env = Env::new(None);
     core::ns().iter().for_each(|f|
         { env.set(&f.name, &MalType::Fn(f.clone())); });
+    rep("(def! not (fn* (a) (if a false true)))", &mut env).unwrap();
+
     loop {
-        let mut s = String::new();
-        print!("user> "); stdout().flush().unwrap();
-        if let Ok(0) = stdin().read_line(&mut s) { break; }
-        if !s.trim().is_empty() {
-            println!("{}", rep(&s, &mut env));
-            dbg!(" env: {}", env);
+        let readline = rl.readline("user> ");
+        match readline {
+            Ok(line) => {
+                rl.add_history_entry(&line);
+                rl.save_history(".mal-history").unwrap();
+                if line.len() > 0 {
+                    match rep(&line, &mut env) {
+                        Ok(out) => println!("{}", out),
+                        Err(e) => println!("Error: {}", e),
+                    }
+                }
+            },
+            Err(ReadlineError::Interrupted) => continue,
+            Err(ReadlineError::Eof) => break,
+            Err(err) => {
+                println!("Error: {:?}", err);
+                break;
+            }
         }
     }
 }
 
-fn rep(s: &str, env: &mut Env) -> String {
+fn rep(s: &str, env: &mut Env) -> Result<String> {
     READ(s).and_then(|x| EVAL(&x, env)).and_then(|x| PRINT(&x))
-        .unwrap_or_else(|msg| { eprintln!("Err: {}", msg); "".to_string() })
 }
 
 fn READ(s: &str) -> Result<MalType> {
@@ -43,6 +62,7 @@ fn EVAL(ast: &MalType, env: &mut Env) -> Result<MalType> {
     dbg!("\n\x1b[31mEVAL\x1b[m ast:{} env:{}", ast, env);
     if ast.list().is_none() { return eval_ast(ast, env); }
     if ast.list().unwrap().is_empty() { return Ok(ast.clone()); }
+    dbg!("EVAL match...");
     match ast.get(0).and_then(|x| x.symbol()).as_deref() {
         Some("def!") => {
             let a1 = ast.get(1).and_then(|x| x.symbol());
@@ -96,7 +116,7 @@ fn EVAL(ast: &MalType, env: &mut Env) -> Result<MalType> {
         Some("fn*") => {
             dbg!("EVAL fn*1: {}", ast.clone());
             let a1 = ast.get(1)
-                .and_then(|x| x.list())
+                .and_then(|x| x.list_or_vec())
                 .filter(|x| x.iter()
                     .all(|x| x.symbol().is_some()));
             let a2 = ast.get(2);
@@ -112,14 +132,21 @@ fn EVAL(ast: &MalType, env: &mut Env) -> Result<MalType> {
         _ => {
             let el = eval_ast(ast, env)?;
             let f = el.get(0).unwrap();
-            let args = el.list().unwrap().into_iter().skip(1).collect_vec();
+            let args = el.list_or_vec().unwrap().into_iter().skip(1).collect_vec();
             dbg!("EVAL default {}", el);
             match f {
                 MalType::Fn(f) => { (f.f)(&args) },
                 MalType::Lambda(bind, ast, mut lambda_env) => {
                     lambda_env.outer = Some(Rc::new(env.clone()));
-                    for (b, e) in bind.iter().zip(args) {
-                        lambda_env.set(&b, &e);
+                    for i in 0..bind.len() {
+                        if bind[i] == "&" { if i < bind.len() - 1 {
+                            lambda_env.set(&bind[i + 1],
+                                &MalType::ListVec(MalListVec{0: true,
+                                    1: args.iter().skip(i).cloned().collect_vec()}));
+                            } break;
+                        }
+                        if i >= args.len() { break; }
+                        lambda_env.set(&bind[i], &args[i]);
                     }
                     EVAL(&ast[0], &mut lambda_env)
                 },
@@ -130,7 +157,7 @@ fn EVAL(ast: &MalType, env: &mut Env) -> Result<MalType> {
 }
 
 fn PRINT(ast: &MalType) -> Result<String> {
-    Ok(printer::pr_str(ast))
+    Ok(printer::pr_str(ast, true))
 }
 
 fn eval_ast(ast: &MalType, env: &mut Env) -> Result<MalType> {
@@ -140,16 +167,11 @@ fn eval_ast(ast: &MalType, env: &mut Env) -> Result<MalType> {
             dbg!(" eval_ast handle Symbol {} on env:{}", s, env);
             env.get(&*s)
         },
-        MalType::List(v) => {
-            dbg!(" eval_ast handle List {}", ast);
-            let v: Result<Vec<_>> = v.into_iter().map(|x|
-                EVAL(x, env)).collect();
-            Ok(MalType::List(v?))
-        },
-        MalType::Vec(v) => {
-            let v: Result<Vec<_>> = v.into_iter().map(|x|
-                EVAL(x, env)).collect();
-            Ok(MalType::Vec(v?))
+        MalType::ListVec(v) => {
+            dbg!(" eval_ast handle List or Vec {}", ast);
+            let v1: Vec<MalType> = v.1.clone().into_iter().map(|x|
+                EVAL(&x, env)).collect::<Result<Vec<MalType>>>()?;
+            Ok(MalType::ListVec(MalListVec{0: v.0, 1: v1}))
         },
         MalType::HashMap(v) => {
             let mut v1: Vec<(MalType, MalType)> = Vec::new();
