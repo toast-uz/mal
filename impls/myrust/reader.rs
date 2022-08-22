@@ -1,25 +1,22 @@
 use std::collections::HashMap;
 use itertools::Itertools;
 use regex::Regex;
+use once_cell::sync::Lazy;
 use crate::types::*;
 use crate::malerr;
 
-const _NAME2SYMBOL: [(&str, &str); 6] = [
-    ("'", "quote"),
-    ("`", "quasiquote"),
-    ("~", "unquote"),
-    ("~@", "splice-unquote"),
-    ("^", "with-meta"),
-    ("@", "deref"),
-];
+static NAME2SYMBOL: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
+    [
+        ("'", "quote"),
+        ("`", "quasiquote"),
+        ("~", "unquote"),
+        ("~@", "splice-unquote"),
+        ("^", "with-meta"),
+        ("@", "deref"),
+    ].iter().cloned().collect()});
 
-lazy_static! {
-    static ref NAME2SYMBOL: HashMap<&'static str, &'static str> = {
-        _NAME2SYMBOL.iter().cloned().collect()
-    };
-    
-    static ref RE: Regex = Regex::new(r#"[\s,]*(~@|[\[\]{}()'`~^@]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#).unwrap();
-}
+static RE: Lazy<Regex> = Lazy::new(||
+    Regex::new(r#"[\s,]*(~@|[\[\]{}()'`~^@]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#).unwrap());
 
 #[derive(Debug, Clone)]
 pub struct Reader {

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::ops::{Add, Sub, Mul, Div};
 use itertools::Itertools;
 use regex::Regex;
+use once_cell::sync::Lazy;
 use crate::env::*;
 
 const PREFIX_KEYWORD: &str = "\u{029e}";
@@ -22,17 +23,14 @@ const _NAME2MALTYPE: [(&str, &MalType); 9] = [
     ("false", &MalType::False),
 ];
 
-lazy_static! {
-    static ref MALTYPE2NAME: HashMap<&'static MalType, &'static str> = {
-        _NAME2MALTYPE.iter().cloned().map(|(k, v)| (v, k)).collect()
-    };
+static MALTYPE2NAME: Lazy<HashMap<&'static MalType, &'static str>> = Lazy::new(||
+    _NAME2MALTYPE.iter().cloned().map(|(k, v)| (v, k)).collect());
 
-    static ref NAME2MALTYPE: HashMap<&'static str, &'static MalType> = {
-        _NAME2MALTYPE.iter().cloned().collect()
-    };
+static NAME2MALTYPE: Lazy<HashMap<&'static str, &'static MalType>> = Lazy::new(||
+    _NAME2MALTYPE.iter().cloned().collect());
 
-    static ref STRING_RE: Regex = Regex::new(r#""(?:\\.|[^\\"])*"?"#).unwrap();
-}
+static STRING_RE: Lazy<Regex> = Lazy::new(||
+    Regex::new(r#""(?:\\.|[^\\"])*"?"#).unwrap());
 
 pub type Result<T> = std::result::Result<T, MalError>;
 
