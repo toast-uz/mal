@@ -12,6 +12,9 @@ use rustyline::Editor;
 use types::*;
 use env::*;
 
+#[macro_use]
+extern crate lazy_static;
+
 const DEBUG: bool = false;
 macro_rules! dbg {( $( $x:expr ),* ) => ( if DEBUG {eprintln!($( $x ),* )})}
 

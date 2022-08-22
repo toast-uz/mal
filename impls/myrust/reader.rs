@@ -4,6 +4,23 @@ use regex::Regex;
 use crate::types::*;
 use crate::malerr;
 
+const _NAME2SYMBOL: [(&str, &str); 6] = [
+    ("'", "quote"),
+    ("`", "quasiquote"),
+    ("~", "unquote"),
+    ("~@", "splice-unquote"),
+    ("^", "with-meta"),
+    ("@", "deref"),
+];
+
+lazy_static! {
+    static ref NAME2SYMBOL: HashMap<&'static str, &'static str> = {
+        _NAME2SYMBOL.iter().cloned().collect()
+    };
+    
+    static ref RE: Regex = Regex::new(r#"[\s,]*(~@|[\[\]{}()'`~^@]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#).unwrap();
+}
+
 #[derive(Debug, Clone)]
 pub struct Reader {
     tokens: Vec<Token>,
@@ -29,8 +46,7 @@ impl Reader {
 
 // take a single string and return an array/list of all the tokens (strings) in it.
 fn tokenize(s: &str) -> Vec<Token> {
-    let re = Regex::new(r#"[\s,]*(~@|[\[\]{}()'`~^@]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#).unwrap();
-    re.captures_iter(s.trim())
+    RE.captures_iter(s.trim())
         .map(|cap| Token::new(&cap[1])).collect_vec()
 }
 
@@ -74,31 +90,21 @@ fn read_hash_map(reader: &mut Reader) -> Result<MalType> {
     read_sequence(reader, "hashmap", &MalType::Lcurly, &MalType::Rcurly)
 }
 
-const NAME2SYMBOL: [(&str, &str); 6] = [
-    ("'", "quote"),
-    ("`", "quasiquote"),
-    ("~", "unquote"),
-    ("~@", "splice-unquote"),
-    ("^", "with-meta"),
-    ("@", "deref"),
-];
-
 // peek at the first token in the Reader object
 // and switch on the first character of that token.
 // The return value from read_form is a mal data type.
 pub fn read_form(reader: &mut Reader) -> Result<MalType> {
-    let name2symbol: HashMap<&str, &str> = NAME2SYMBOL.iter().cloned().collect();
     match MalType::from_token(&reader.peek().unwrap())? {
-        MalType::Symbol(x) if name2symbol.contains_key(&*x) => {
+        MalType::Symbol(x) if NAME2SYMBOL.contains_key(&*x) => {
             reader.next();
-            if name2symbol[&*x] == "with-meta" {
+            if NAME2SYMBOL[&*x] == "with-meta" {
                 let meta = read_form(reader)?;
                 Ok(MalType::ListVec(MalListVec{0: true,
-                    1: vec![MalType::Symbol(name2symbol[&*x].to_string()),
+                    1: vec![MalType::Symbol(NAME2SYMBOL[&*x].to_string()),
                     read_form(reader)?, meta]}))
             } else {
                 Ok(MalType::ListVec(MalListVec{0: true,
-                    1: vec![MalType::Symbol(name2symbol[&*x].to_string()),
+                    1: vec![MalType::Symbol(NAME2SYMBOL[&*x].to_string()),
                     read_form(reader)?]}))
             }
         },

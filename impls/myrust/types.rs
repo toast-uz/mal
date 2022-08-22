@@ -10,7 +10,7 @@ use crate::env::*;
 
 const PREFIX_KEYWORD: &str = "\u{029e}";
 
-const NAME2MALTYPE: [(&str, &MalType); 9] = [
+const _NAME2MALTYPE: [(&str, &MalType); 9] = [
     ("(", &MalType::Lparen),
     (")", &MalType::Rparen),
     ("[", &MalType::Lsqure),
@@ -21,6 +21,18 @@ const NAME2MALTYPE: [(&str, &MalType); 9] = [
     ("true", &MalType::True),
     ("false", &MalType::False),
 ];
+
+lazy_static! {
+    static ref MALTYPE2NAME: HashMap<&'static MalType, &'static str> = {
+        _NAME2MALTYPE.iter().cloned().map(|(k, v)| (v, k)).collect()
+    };
+
+    static ref NAME2MALTYPE: HashMap<&'static str, &'static MalType> = {
+        _NAME2MALTYPE.iter().cloned().collect()
+    };
+
+    static ref STRING_RE: Regex = Regex::new(r#""(?:\\.|[^\\"])*"?"#).unwrap();
+}
 
 pub type Result<T> = std::result::Result<T, MalError>;
 
@@ -196,20 +208,18 @@ impl MalType {
 
     pub fn from_token(token: &Token) -> Result<Self> {
         let s = token.to_string();
-        let name2maltype: HashMap<&str, &MalType> = NAME2MALTYPE.iter().cloned().collect();
-        let string_re = Regex::new(r#""(?:\\.|[^\\"])*"?"#).unwrap();
         if let Some(';') = s.chars().next() {
             Ok(Self::Comment)
         } else if let Ok(num) = s.parse::<Number>() {
             Ok(Self::Num(num))
-        } else if string_re.is_match(&s) {
+        } else if STRING_RE.is_match(&s) {
             Ok(Self::String(Self::_unescape(&s[1..(s.len() - 1)])))
         } else if let Some('\"') = s.chars().next() {
             Err(malerr!("expected '\"', got EOF"))
         } else if let Some(':') = s.chars().next() {
             Ok(Self::Keyword(s[1..].to_string()))
         } else { match &s as &str {
-            x if name2maltype.contains_key(x) => Ok(name2maltype[x].clone()),
+            x if NAME2MALTYPE.contains_key(x) => Ok(NAME2MALTYPE[x].clone()),
             x => Ok(Self::Symbol(x.to_string())),
         } }
     }
@@ -223,11 +233,9 @@ impl MalType {
     }
 
     pub fn to_string(&self) -> String {
-        let maltype2name: HashMap<&MalType, &str> = NAME2MALTYPE.iter().cloned()
-            .map(|(k, v)| (v, k)).collect();
         match self {
             Self::Comment => "".to_string(),
-            x if maltype2name.contains_key(&x) => maltype2name[&*x].to_string(),
+            x if MALTYPE2NAME.contains_key(&x) => MALTYPE2NAME[&*x].to_string(),
             Self::Num(num) => format!("{}", num),
             Self::String(s) => s.to_string(),
             Self::Keyword(s) => format!(":{}", s),
@@ -263,6 +271,9 @@ impl From<Number> for MalType { fn from(x: Number) -> Self { Self::Num(x) } }
 impl From<i64> for MalType { fn from(x: i64) -> Self { Self::from(Number::from(x)) } }
 impl From<f64> for MalType { fn from(x: f64) -> Self { Self::from(Number::from(x)) } }
 impl From<usize> for MalType { fn from(x: usize) -> Self { Self::from(Number::from(x)) } }
+
+unsafe impl Send for MalType {}
+unsafe impl Sync for MalType {}
 
 // ----------- MalListVec -----------
 
@@ -323,6 +334,9 @@ impl Hash for MalFunc {
         self.name.hash(state)
     }
 }
+
+unsafe impl Send for MalFunc {}
+unsafe impl Sync for MalFunc {}
 
 // ----------- MalError -----------
 
